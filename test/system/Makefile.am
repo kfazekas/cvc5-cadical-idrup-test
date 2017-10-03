@@ -5,7 +5,8 @@ CPLUSPLUS_TESTS = \
 	ouroborous \
 	two_smt_engines \
 	smt2_compliance \
-	statistics
+	statistics \
+	bbsetoptsegv
 
 if CVC4_BUILD_LIBCOMPAT
 #CPLUSPLUS_TESTS += \
