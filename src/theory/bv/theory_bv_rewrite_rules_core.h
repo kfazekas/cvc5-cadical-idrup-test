@@ -26,6 +26,8 @@ namespace CVC4 {
 namespace theory {
 namespace bv {
 
+/* -------------------------------------------------------------------------- */
+
 template<> inline
 bool RewriteRule<ConcatFlatten>::applies(TNode node) {
   return (node.getKind() == kind::BITVECTOR_CONCAT);
@@ -51,6 +53,8 @@ Node RewriteRule<ConcatFlatten>::apply(TNode node) {
   Debug("bv-rewrite") << "RewriteRule<ConcatFlatten>(" << resultNode << ")" << std::endl;
   return resultNode;
 }
+
+/* -------------------------------------------------------------------------- */
 
 template<> inline
 bool RewriteRule<ConcatExtractMerge>::applies(TNode node) {
@@ -113,6 +117,8 @@ Node RewriteRule<ConcatExtractMerge>::apply(TNode node) {
   return utils::mkConcat(mergedExtracts);
 }
 
+/* -------------------------------------------------------------------------- */
+
 template<> inline
 bool RewriteRule<ConcatConstantMerge>::applies(TNode node) {
   return node.getKind() == kind::BITVECTOR_CONCAT;
@@ -155,6 +161,55 @@ Node RewriteRule<ConcatConstantMerge>::apply(TNode node) {
   return utils::mkConcat(mergedConstants);
 }
 
+/** ---------------------------------------------------------------------------
+ * ConcatPullUp
+ *
+ * x_m & concat(0_n, z_[m-n]) --> concat(0_n, x[m-n-1:0] & z)
+ */
+
+template <>
+inline bool RewriteRule<ConcatPullUp>::applies(TNode node)
+{
+  if (node.getKind() != kind::BITVECTOR_AND) return false;
+
+  Kind k0 = node[0].getKind();
+  Kind k1 = node[1].getKind();
+
+  TNode n = k0 == kind::BITVECTOR_CONCAT
+                ? node[0][0]
+                : (k1 == kind::BITVECTOR_CONCAT ? node[1][0] : TNode());
+
+  return utils::isZero(n);
+}
+
+template <>
+inline Node RewriteRule<ConcatPullUp>::apply(TNode node)
+{
+  Debug("bv-rewrite") << "RewriteRule<ConcatPullUp>(" << node << ")"
+                      << std::endl;
+  uint32_t m, n;
+  TNode x, concat;
+
+  if (node[0].getKind() == kind::BITVECTOR_CONCAT)
+  {
+    x = node[0];
+    concat = node[1];
+  }
+  else
+  {
+    Assert(node[1].getKind() == kind::BITVECTOR_CONCAT);
+    x = node[1];
+    concat = node[0];
+  }
+  Assert(utils::isZero(concat[0]));
+  m = utils::getSize(x);
+  n = utils::getSize(concat[0]);
+  return utils::mkConcat(
+      concat[0], utils::mkAnd(utils::mkExtract(x, m - n - 1, 0), concat[1]));
+}
+
+/* -------------------------------------------------------------------------- */
+
 template<> inline
 bool RewriteRule<ExtractWhole>::applies(TNode node) {
   if (node.getKind() != kind::BITVECTOR_EXTRACT) return false;
@@ -172,6 +227,8 @@ Node RewriteRule<ExtractWhole>::apply(TNode node) {
   return node[0];
 }
 
+/* -------------------------------------------------------------------------- */
+
 template<> inline
 bool RewriteRule<ExtractConstant>::applies(TNode node) {
   if (node.getKind() != kind::BITVECTOR_EXTRACT) return false;
@@ -186,6 +243,8 @@ Node RewriteRule<ExtractConstant>::apply(TNode node) {
   BitVector childValue = child.getConst<BitVector>();
   return utils::mkConst(childValue.extract(utils::getExtractHigh(node), utils::getExtractLow(node)));
 }
+
+/* -------------------------------------------------------------------------- */
 
 template<> inline
 bool RewriteRule<ExtractConcat>::applies(TNode node) {
@@ -221,6 +280,8 @@ Node RewriteRule<ExtractConcat>::apply(TNode node) {
   return utils::mkConcat(resultChildren);
 }
 
+/* -------------------------------------------------------------------------- */
+
 template<> inline
 bool RewriteRule<ExtractExtract>::applies(TNode node) {
   if (node.getKind() != kind::BITVECTOR_EXTRACT) return false;
@@ -242,6 +303,8 @@ Node RewriteRule<ExtractExtract>::apply(TNode node) {
   return result;
 }
 
+/* -------------------------------------------------------------------------- */
+
 template<> inline
 bool RewriteRule<FailEq>::applies(TNode node) {
   //Debug("bv-rewrite") << "RewriteRule<FailEq>(" << node << ")" << std::endl;
@@ -256,6 +319,8 @@ Node RewriteRule<FailEq>::apply(TNode node) {
   return utils::mkFalse();
 }
 
+/* -------------------------------------------------------------------------- */
+
 template<> inline
 bool RewriteRule<SimplifyEq>::applies(TNode node) {
   if (node.getKind() != kind::EQUAL) return false;
@@ -267,6 +332,8 @@ Node RewriteRule<SimplifyEq>::apply(TNode node) {
   Debug("bv-rewrite") << "RewriteRule<SimplifyEq>(" << node << ")" << std::endl;
   return utils::mkTrue();
 }
+
+/* -------------------------------------------------------------------------- */
 
 template<> inline
 bool RewriteRule<ReflexivityEq>::applies(TNode node) {

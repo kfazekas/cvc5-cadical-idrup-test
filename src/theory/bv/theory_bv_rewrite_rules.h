@@ -39,6 +39,7 @@ enum RewriteRuleId
   ConcatFlatten,
   ConcatExtractMerge,
   ConcatConstantMerge,
+  ConcatPullUp,
   ExtractExtract,
   ExtractWhole,
   ExtractConcat,
@@ -200,6 +201,7 @@ inline std::ostream& operator << (std::ostream& out, RewriteRuleId ruleId) {
   case ConcatFlatten:       out << "ConcatFlatten";       return out;
   case ConcatExtractMerge:  out << "ConcatExtractMerge";  return out;
   case ConcatConstantMerge: out << "ConcatConstantMerge"; return out;
+  case ConcatPullUp:        out << "ConcatPullUp";        return out;
   case ExtractExtract:      out << "ExtractExtract";      return out;
   case ExtractWhole:        out << "ExtractWhole";        return out;
   case ExtractConcat:       out << "ExtractConcat";       return out;
@@ -579,6 +581,7 @@ struct AllRewriteRules {
   RewriteRule<BvIteMergeElseIf>               rule136;
   RewriteRule<BvIteMergeThenElse>             rule137;
   RewriteRule<BvIteMergeElseElse>             rule138;
+  RewriteRule<ConcatPullUp>                   rule139;
 };
 
 template<> inline
