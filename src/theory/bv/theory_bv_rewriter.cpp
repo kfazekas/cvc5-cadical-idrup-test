@@ -242,7 +242,6 @@ RewriteResponse TheoryBVRewriter::RewriteConcat(TNode node, bool prerewrite)
       RewriteRule<ConcatExtractMerge>,
       // Merge the adjacent extracts on non-constants
       RewriteRule<ConcatConstantMerge>,
-      RewriteRule<ConcatPullUp>,
       // Merge the adjacent extracts on constants
       ApplyRuleToChildren<kind::BITVECTOR_CONCAT, ExtractWhole>>::apply(node);
   return RewriteResponse(REWRITE_DONE, resultNode);
@@ -252,7 +251,8 @@ RewriteResponse TheoryBVRewriter::RewriteAnd(TNode node, bool prerewrite) {
   Node resultNode = node;
   resultNode = LinearRewriteStrategy
     < RewriteRule<FlattenAssocCommutNoDuplicates>,
-      RewriteRule<AndSimplify>
+      RewriteRule<AndSimplify>,
+      RewriteRule<AndConcatPullUp>
       >::apply(node);
 
   if (!prerewrite) {

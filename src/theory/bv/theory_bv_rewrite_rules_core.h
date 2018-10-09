@@ -161,53 +161,6 @@ Node RewriteRule<ConcatConstantMerge>::apply(TNode node) {
   return utils::mkConcat(mergedConstants);
 }
 
-/** ---------------------------------------------------------------------------
- * ConcatPullUp
- *
- * x_m & concat(0_n, z_[m-n]) --> concat(0_n, x[m-n-1:0] & z)
- */
-
-template <>
-inline bool RewriteRule<ConcatPullUp>::applies(TNode node)
-{
-  if (node.getKind() != kind::BITVECTOR_AND) return false;
-
-  Kind k0 = node[0].getKind();
-  Kind k1 = node[1].getKind();
-
-  TNode n = k0 == kind::BITVECTOR_CONCAT
-                ? node[0][0]
-                : (k1 == kind::BITVECTOR_CONCAT ? node[1][0] : TNode());
-
-  return utils::isZero(n);
-}
-
-template <>
-inline Node RewriteRule<ConcatPullUp>::apply(TNode node)
-{
-  Debug("bv-rewrite") << "RewriteRule<ConcatPullUp>(" << node << ")"
-                      << std::endl;
-  uint32_t m, n;
-  TNode x, concat;
-
-  if (node[0].getKind() == kind::BITVECTOR_CONCAT)
-  {
-    x = node[0];
-    concat = node[1];
-  }
-  else
-  {
-    Assert(node[1].getKind() == kind::BITVECTOR_CONCAT);
-    x = node[1];
-    concat = node[0];
-  }
-  Assert(utils::isZero(concat[0]));
-  m = utils::getSize(x);
-  n = utils::getSize(concat[0]);
-  return utils::mkConcat(
-      concat[0], utils::mkAnd(utils::mkExtract(x, m - n - 1, 0), concat[1]));
-}
-
 /* -------------------------------------------------------------------------- */
 
 template<> inline
