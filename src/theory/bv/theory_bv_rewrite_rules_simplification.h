@@ -516,11 +516,13 @@ inline Node RewriteRule<AndConcatPullUp>::apply(TNode node)
                       << std::endl;
   uint32_t m, n;
   TNode x, concat;
+  Node z;
+  NodeBuilder<> zb(kind::BITVECTOR_CONCAT);
 
   if (node[0].getKind() == kind::BITVECTOR_CONCAT)
   {
-    concat = node[0];
     x = node[1];
+    concat = node[0];
   }
   else
   {
@@ -529,12 +531,25 @@ inline Node RewriteRule<AndConcatPullUp>::apply(TNode node)
     x = node[0];
   }
   Assert(utils::isZero(concat[0]));
+
+  size_t nchildren = concat.getNumChildren();
+  if (nchildren > 2)
+  {
+    for (size_t i = 1; i < nchildren; i++) zb << concat[i];
+    z = zb.constructNode();
+  }
+  else
+  {
+    z = concat[1];
+  }
   m = utils::getSize(x);
   n = utils::getSize(concat[0]);
+  Assert(utils::getSize(z) == m - n);
+
   return utils::mkConcat(
       concat[0],
       NodeManager::currentNM()->mkNode(
-          kind::BITVECTOR_AND, utils::mkExtract(x, m - n - 1, 0), concat[1]));
+          kind::BITVECTOR_AND, utils::mkExtract(x, m - n - 1, 0), z));
 }
 
 /* -------------------------------------------------------------------------- */
