@@ -499,13 +499,17 @@ inline bool RewriteRule<AndConcatPullUp>::applies(TNode node)
 {
   if (node.getKind() != kind::BITVECTOR_AND) return false;
 
-  Kind k0 = node[0].getKind();
-  Kind k1 = node[1].getKind();
+  TNode n;
 
-  TNode n = k0 == kind::BITVECTOR_CONCAT
-                ? node[0][0]
-                : (k1 == kind::BITVECTOR_CONCAT ? node[1][0] : TNode());
-
+  for (const TNode& c : node)
+  {
+    if (c.getKind() == kind::BITVECTOR_CONCAT)
+    {
+      n = c[0];
+      break;
+    }
+  }
+  if (n.isNull()) return false;
   return utils::isZero(n);
 }
 
@@ -515,35 +519,33 @@ inline Node RewriteRule<AndConcatPullUp>::apply(TNode node)
   Debug("bv-rewrite") << "RewriteRule<AndConcatPullUp>(" << node << ")"
                       << std::endl;
   uint32_t m, n;
-  TNode x, concat;
-  Node z;
+  TNode concat;
+  Node x, z;
+  NodeBuilder<> xb(kind::BITVECTOR_AND);
   NodeBuilder<> zb(kind::BITVECTOR_CONCAT);
 
-  if (node[0].getKind() == kind::BITVECTOR_CONCAT)
+  for (const TNode& c : node)
   {
-    x = node[1];
-    concat = node[0];
+    if (concat.isNull() && c.getKind() == kind::BITVECTOR_CONCAT)
+    {
+      concat = c;
+    }
+    else
+    {
+      xb << c;
+    }
   }
-  else
-  {
-    Assert(node[1].getKind() == kind::BITVECTOR_CONCAT);
-    concat = node[1];
-    x = node[0];
-  }
+  x = xb.getNumChildren() > 1 ? xb.constructNode() : xb[0];
   Assert(utils::isZero(concat[0]));
 
-  size_t nchildren = concat.getNumChildren();
-  if (nchildren > 2)
-  {
-    for (size_t i = 1; i < nchildren; i++) zb << concat[i];
-    z = zb.constructNode();
-  }
-  else
-  {
-    z = concat[1];
-  }
   m = utils::getSize(x);
   n = utils::getSize(concat[0]);
+
+  for (size_t i = 1, nchildren = concat.getNumChildren(); i < nchildren; i++)
+  {
+    zb << concat[i];
+  }
+  z = zb.getNumChildren() > 1 ? zb.constructNode() : zb[0];
   Assert(utils::getSize(z) == m - n);
 
   return utils::mkConcat(
