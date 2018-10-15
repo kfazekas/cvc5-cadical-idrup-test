@@ -548,7 +548,6 @@ inline Node RewriteRule<AndConcatPullUp>::apply(TNode node)
     }
   }
   x = xb.getNumChildren() > 1 ? xb.constructNode() : xb[0];
-  Assert(utils::isZero(concat[0]));
 
   m = utils::getSize(x);
   n = utils::getSize(concat[0]);
