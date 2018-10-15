@@ -506,7 +506,14 @@ inline bool RewriteRule<AndConcatPullUp>::applies(TNode node)
   {
     if (c.getKind() == kind::BITVECTOR_CONCAT)
     {
-      n = c[0];
+      for (const TNode& cc : c)
+      {
+        if (cc.isConst())
+        {
+          n = cc;
+          break;
+        }
+      }
       break;
     }
   }
