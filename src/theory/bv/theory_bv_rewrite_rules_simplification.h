@@ -549,9 +549,6 @@ inline Node RewriteRule<AndConcatPullUp>::apply(TNode node)
   }
   x = xb.getNumChildren() > 1 ? xb.constructNode() : xb[0];
 
-  m = utils::getSize(x);
-  n = utils::getSize(concat[0]);
-
   for (const TNode& child : concat)
   {
     if (c.isNull())
@@ -581,6 +578,8 @@ inline Node RewriteRule<AndConcatPullUp>::apply(TNode node)
   {
     z = nc > 1 ? zb.constructNode() : zb[0];
   }
+  m = utils::getSize(x);
+  n = utils::getSize(c);
   my = y.isNull() ? 0 : utils::getSize(y);
   mz = z.isNull() ? 0 : utils::getSize(z);
   Assert(mz == m - my - n);
