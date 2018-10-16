@@ -663,7 +663,7 @@ inline Node RewriteRule<AndOrConcatPullUp>::apply(TNode node)
     else
     {
       Assert(kind == kind::BITVECTOR_OR);
-      res << utils::mkExtract(x, m-my-1, m-my-n+1);
+      if (n > 1) res << utils::mkExtract(x, m-my-1, m-my-n+1);
       res << utils::mkOne(1);
     }
   }
