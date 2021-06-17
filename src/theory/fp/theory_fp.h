@@ -148,18 +148,24 @@ class TheoryFp : public Theory
   Node abstractFloatToReal(Node);
 
  private:
-
   ConversionAbstractionMap d_realToFloatMap;
   ConversionAbstractionMap d_floatToRealMap;
   AbstractionMap d_abstractionMap;  // abstract -> original
 
   /** The theory rewriter for this theory. */
   TheoryFpRewriter d_rewriter;
-  /** A (default) theory state object */
+  /** A (default) theory state object. */
   TheoryState d_state;
-  /** A (default) inference manager */
+  /** A (default) inference manager. */
   TheoryInferenceManager d_im;
-}; /* class TheoryFp */
+  /**
+   * Word-blast queue for facts sent to the FP theory.
+   * Gets populated on preNotifyFact().
+   */
+  std::vector<Node> d_wbFacts;
+  /** Cache of word-blasted facts. */
+  std::unordered_set<Node> d_wbFactsCache;
+};
 
 }  // namespace fp
 }  // namespace theory

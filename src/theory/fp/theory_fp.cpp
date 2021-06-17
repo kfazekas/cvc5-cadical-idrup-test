@@ -81,7 +81,7 @@ TheoryFp::TheoryFp(context::Context* c,
   // indicate we are using the default theory state and inference manager
   d_theoryState = &d_state;
   d_inferManager = &d_im;
-} /* TheoryFp::TheoryFp() */
+}
 
 TheoryRewriter* TheoryFp::getTheoryRewriter() { return &d_rewriter; }
 
@@ -581,10 +581,18 @@ void TheoryFp::convertAndEquateTerm(TNode node) {
   return;
 }
 
-void TheoryFp::registerTerm(TNode node) {
+void TheoryFp::registerTerm(TNode node)
+{
   Trace("fp-registerTerm") << "TheoryFp::registerTerm(): " << node << std::endl;
 
-  if (!isRegistered(node)) {
+  /* Push onto "to word-blast" queue, will be word-blasted at postCheck. */
+  if (d_wbFactsCache.find(node) == d_wbFactsCache.end())
+  {
+    d_wbFacts.push_back(node);
+  }
+
+  if (!isRegistered(node))
+  {
     Kind k = node.getKind();
     Assert(k != kind::FLOATINGPOINT_TO_FP_GENERIC
            && k != kind::FLOATINGPOINT_SUB && k != kind::FLOATINGPOINT_EQ
@@ -648,15 +656,13 @@ void TheoryFp::registerTerm(TNode node) {
       handleLemma(nm->mkNode(kind::EQUAL, node, equalityAlias),
                   InferenceId::FP_REGISTER_TERM);
     }
-
-    // Use symfpu to produce an equivalent bit-vector statement
-    convertAndEquateTerm(node);
   }
   return;
 }
 
-bool TheoryFp::isRegistered(TNode node) {
-  return !(d_registeredTerms.find(node) == d_registeredTerms.end());
+bool TheoryFp::isRegistered(TNode node)
+{
+  return d_registeredTerms.find(node) != d_registeredTerms.end();
 }
 
 void TheoryFp::preRegisterTerm(TNode node)
@@ -717,7 +723,23 @@ bool TheoryFp::needsCheckLastEffort()
 
 void TheoryFp::postCheck(Effort level)
 {
-  // Resolve the abstractions for the conversion lemmas
+  /* Word -blast.
+   * We do this at any level to give the BV solver a chance to decide at
+   * which level to do something with the word-blasted terms. */
+
+  while (!d_wbFacts.empty())
+  {
+    Node fact = d_wbFacts.back();
+    d_wbFacts.pop_back();
+    /* Word-blast fact and cache. */
+    if (d_wbFactsCache.find(fact) == d_wbFactsCache.end())
+    {
+      d_wbFactsCache.insert(fact);
+      convertAndEquateTerm(fact);
+    }
+  }
+
+  /* Resolve the abstractions for the conversion lemmas */
   if (level == EFFORT_LAST_CALL)
   {
     Trace("fp") << "TheoryFp::check(): checking abstractions" << std::endl;
