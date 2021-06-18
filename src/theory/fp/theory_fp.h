@@ -164,7 +164,7 @@ class TheoryFp : public Theory
    */
   std::vector<Node> d_wbFacts;
   /** Cache of word-blasted facts. */
-  std::unordered_set<Node> d_wbFactsCache;
+  context::CDHashSet<Node> d_wbFactsCache;
 };
 
 }  // namespace fp
