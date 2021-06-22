@@ -668,7 +668,7 @@ bool TheoryFp::isRegistered(TNode node)
 
 void TheoryFp::preRegisterTerm(TNode node)
 {
-  if (Configuration::isBuiltWithSymFPU() && !options::fpExp())
+  if (!options::fpExp())
   {
     TypeNode tn = node.getType();
     if (tn.isFloatingPoint())
