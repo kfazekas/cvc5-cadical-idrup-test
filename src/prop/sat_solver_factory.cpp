@@ -29,6 +29,12 @@ CDCLTSatSolver* SatSolverFactory::createCDCLTMinisat(
   return new MinisatSatSolver(env, registry);
 }
 
+CDCLTSatSolverInterface* SatSolverFactory::createCDCLTCadical(
+    Env& env, StatisticsRegistry& registry, const std::string& name)
+{
+  return new CadicalSatSolver(env, registry, name);
+}
+
 SatSolver* SatSolverFactory::createCryptoMinisat(StatisticsRegistry& registry,
                                                  ResourceManager* resmgr,
                                                  const std::string& name)

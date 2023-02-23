@@ -160,6 +160,7 @@ class CDCLTSatSolver : public SatSolver
 
   /**
    * Return the current list of decisions made by the SAT solver.
+   * TODO: this should return a reference
    */
   virtual std::vector<SatLiteral> getDecisions() const = 0;
 

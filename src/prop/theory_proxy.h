@@ -205,10 +205,12 @@ class TheoryProxy : protected EnvObj, public Registrar
   void notifySatLiteral(Node n) override;
 
   /**
-   * Callback to notify that the SAT solver backtracked by the given number
-   * of levels.
+   * Callback to notify that the SAT solver backtracked to the given level.
+   * Forwards the notification to the theory preregistrar via
+   * TheoryPreregistrar::notifyBacktrack();
+   * @param level The level the SAT solver backtracked to.
    */
-  void notifyBacktrack(uint32_t nlevels);
+  void notifyBacktrack(uint32_t level);
 
   /** Get the zero-level assertions */
   std::vector<Node> getLearnedZeroLevelLiterals(

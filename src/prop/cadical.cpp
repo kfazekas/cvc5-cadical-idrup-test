@@ -18,11 +18,14 @@
 #include "prop/cadical.h"
 
 #include "base/check.h"
+#include "prop/theory_proxy.h"
 #include "util/resource_manager.h"
 #include "util/statistics_registry.h"
 
 namespace cvc5::internal {
 namespace prop {
+
+/* CadicalSolver ------------------------------------------------------------ */
 
 using CadicalLit = int;
 using CadicalVar = int;
@@ -38,8 +41,7 @@ SatValue toSatValue(int result)
   return SAT_VALUE_UNKNOWN;
 }
 
-/* Note: CaDiCaL returns lit/-lit for true/false. Older versions returned 1/-1.
- */
+// Note: CaDiCaL returns lit/-lit for true/false. Older versions returned 1/-1.
 SatValue toSatValueLit(int value)
 {
   if (value > 0) return SAT_VALUE_TRUE;
@@ -53,6 +55,12 @@ CadicalLit toCadicalLit(const SatLiteral lit)
 }
 
 CadicalVar toCadicalVar(SatVariable var) { return var; }
+
+SatLiteral toSatLiteral(const CadicalLit lit)
+{
+  return lit < 0 ? SatLiteral(SatVariable(-lit), true)
+                 : SatLiteral(SatVariable(lit), false);
+}
 
 }  // namespace helper functions
 
@@ -211,5 +219,141 @@ CadicalSolver::Statistics::Statistics(StatisticsRegistry& registry,
   {
 }
 
+/* CDCLTCadicalSolver ------------------------------------------------------- */
+
+class CadicalPropagator : public CaDiCaL::ExternalPropagator
+{
+ public:
+  CadicalPropagator(prop::TheoryProxy* proxy) : d_proxy(proxy) {}
+
+  void notify_assignment(int lit, bool is_fixed) override
+  {
+    (void)is_fixed;
+    if (d_decisions.size() == d_decisions_control.back())
+    {
+      SatLiteral slit(lit);
+      d_decisions.push_back(slit);
+      d_decision_vars.insert(slit.getSatVariable());
+    }
+  }
+
+  void notify_new_decision_level() override
+  {
+    d_decisions_control.push_back(d_decisions.size());
+  }
+
+  void notify_backtrack(size_t level) override
+  {
+    Assert(d_proxy);
+    d_proxy->notifyBacktrack(level);
+
+    size_t cur_level = d_decisions_control.size();
+    Assert(cur_level > level);
+    for (; cur_level > level; --cur_level)
+    {
+      size_t idx = d_decisions_control.back();
+      d_decisions_control.pop_back();
+      for (size_t i = 0, n = d_decisions.size() - idx; i < n; ++i)
+      {
+        SatLiteral slit = d_decisions.back();
+        d_decisions.pop_back();
+        auto it = d_decision_vars.find(slit.getSatVariable());
+        Assert(it != d_decision_vars.end());
+        d_decision_vars.erase(*it);
+      }
+      Assert(d_decisions.size() == idx);
+    }
+  }
+
+  bool cb_check_found_model(const std::vector<int>& model) override {}
+
+  // int cb_decide () override;
+
+  // int cb_propagate () override;
+
+  // int cb_add_reason_clause_lit (int propagated_lit) override;
+
+  const std::vector<SatLiteral>& get_decisions() const { return d_decisions; }
+
+  bool is_decision(const SatVariable& var)
+  {
+    return d_decision_vars.find(var) != d_decision_vars.end();
+  }
+
+ private:
+  /** The associated theory proxy. */
+  prop::TheoryProxy* d_proxy = nullptr;
+  std::vector<SatLiteral> d_decisions;
+  std::vector<size_t> d_decisions_control;
+  std::unordered_set<SatVariable> d_decision_vars;
+};
+
+CDCLTCadicalSolver::CDCLTCadicalSolver(Env& env,
+                                       StatisticsRegistry& registry,
+                                       const std::string& name)
+    : CadicalSolver(registry, name), EnvObj(env), d_context(nullptr)
+{
+}
+
+void CDCLTCadicalSolver::initialize(context::Context* context,
+                                    prop::TheoryProxy* theoryProxy,
+                                    context::UserContext* userContext,
+                                    ProofNodeManager* pnm)
+{
+  d_context = context;
+  d_proxy = theoryProxy;
+  d_propagator.reset(new CadicalPropagator(theoryProxy));
+}
+
+void CDCLTCadicalSolver::push()
+{
+  d_context->push();  // SAT context for cvc5
+}
+
+void CDCLTCadicalSolver::pop()
+{
+  // TODO
+  // Notify sat proof manager that we have popped and now potentially we need to
+  // retrieve the proofs for the clauses inserted into optimized levels
+  // if (needProof())
+  //{
+  //  d_pfManager->notifyPop();
+  //}
+
+  d_context->pop();  // SAT context for cvc5
+}
+
+void CDCLTCadicalSolver::resetTrail() {}
+
+bool CDCLTCadicalSolver::properExplanation(SatLiteral lit,
+                                           SatLiteral expl) const
+{
+}
+
+void CDCLTCadicalSolver::requirePhase(SatLiteral lit) {}
+
+bool CDCLTCadicalSolver::isDecision(SatVariable var) const
+{
+  return d_propagator->is_decision(var);
+}
+
+std::vector<SatLiteral> CDCLTCadicalSolver::getDecisions() const
+{
+  return d_propagator->get_decisions();
+}
+
+std::vector<Node> CDCLTCadicalSolver::getOrderHeap() const { return {}; }
+
+int32_t CDCLTCadicalSolver::getDecisionLevel(SatVariable v) const {}
+
+int32_t CDCLTCadicalSolver::getIntroLevel(SatVariable v) const {}
+
+std::shared_ptr<ProofNode> CDCLTgetProof()
+{
+  // TODO
+  return nullptr;
+}
+
+/* -------------------------------------------------------------------------- */
 }  // namespace prop
 }  // namespace cvc5::internal

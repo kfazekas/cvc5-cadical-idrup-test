@@ -35,6 +35,9 @@ class SatSolverFactory
   static CDCLTSatSolver* createCDCLTMinisat(Env& env,
                                             StatisticsRegistry& registry);
 
+  static CDCLTSatSolver* createCDCLTCadical(Env& env,
+                                            StatisticsRegistry& registry);
+
   static SatSolver* createCryptoMinisat(StatisticsRegistry& registry,
                                         ResourceManager* resmgr,
                                         const std::string& name = "");
