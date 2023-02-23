@@ -29,12 +29,6 @@ CDCLTSatSolver* SatSolverFactory::createCDCLTMinisat(
   return new MinisatSatSolver(env, registry);
 }
 
-CDCLTSatSolverInterface* SatSolverFactory::createCDCLTCadical(
-    Env& env, StatisticsRegistry& registry, const std::string& name)
-{
-  return new CadicalSatSolver(env, registry, name);
-}
-
 SatSolver* SatSolverFactory::createCryptoMinisat(StatisticsRegistry& registry,
                                                  ResourceManager* resmgr,
                                                  const std::string& name)
@@ -53,11 +47,12 @@ SatSolver* SatSolverFactory::createCryptoMinisat(StatisticsRegistry& registry,
 #endif
 }
 
-SatSolver* SatSolverFactory::createCadical(StatisticsRegistry& registry,
-                                           ResourceManager* resmgr,
-                                           const std::string& name)
+CDCLTSatSolver* SatSolverFactory::createCadical(Env& env,
+                                                StatisticsRegistry& registry,
+                                                ResourceManager* resmgr,
+                                                const std::string& name)
 {
-  CadicalSolver* res = new CadicalSolver(registry, name);
+  CadicalSolver* res = new CadicalSolver(env, registry, name);
   res->init();
   res->setResourceLimit(resmgr);
   return res;

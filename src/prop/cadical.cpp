@@ -25,7 +25,7 @@
 namespace cvc5::internal {
 namespace prop {
 
-/* CadicalSolver ------------------------------------------------------------ */
+/* -------------------------------------------------------------------------- */
 
 using CadicalLit = int;
 using CadicalVar = int;
@@ -56,17 +56,14 @@ CadicalLit toCadicalLit(const SatLiteral lit)
 
 CadicalVar toCadicalVar(SatVariable var) { return var; }
 
-SatLiteral toSatLiteral(const CadicalLit lit)
-{
-  return lit < 0 ? SatLiteral(SatVariable(-lit), true)
-                 : SatLiteral(SatVariable(lit), false);
-}
-
 }  // namespace helper functions
 
-CadicalSolver::CadicalSolver(StatisticsRegistry& registry,
+CadicalSolver::CadicalSolver(Env& env,
+                             StatisticsRegistry& registry,
                              const std::string& name)
-    : d_solver(new CaDiCaL::Solver()),
+    : EnvObj(env),
+      d_solver(new CaDiCaL::Solver()),
+      d_context(nullptr),
       // Note: CaDiCaL variables start with index 1 rather than 0 since negated
       //       literals are represented as the negation of the index.
       d_nextVarIdx(1),
@@ -113,6 +110,8 @@ void CadicalSolver::setResourceLimit(ResourceManager* resmgr)
   d_terminator.reset(new ResourceLimitTerminator(*resmgr));
   d_solver->connect_terminator(d_terminator.get());
 }
+
+/* SatSolver Interface ------------------------------------------------------ */
 
 ClauseId CadicalSolver::addClause(SatClause& clause, bool removable)
 {
@@ -219,7 +218,7 @@ CadicalSolver::Statistics::Statistics(StatisticsRegistry& registry,
   {
 }
 
-/* CDCLTCadicalSolver ------------------------------------------------------- */
+/* CDCLTSatSolver Interface ------------------------------------------------- */
 
 class CadicalPropagator : public CaDiCaL::ExternalPropagator
 {
@@ -265,13 +264,20 @@ class CadicalPropagator : public CaDiCaL::ExternalPropagator
     }
   }
 
-  bool cb_check_found_model(const std::vector<int>& model) override {}
+  bool cb_check_found_model(const std::vector<int>& model) override
+  {
+    return false;
+  }
 
   // int cb_decide () override;
 
   // int cb_propagate () override;
 
   // int cb_add_reason_clause_lit (int propagated_lit) override;
+
+  bool cb_has_external_clause() override { return false; }
+
+  int cb_add_external_clause_lit() override { return 0; }
 
   const std::vector<SatLiteral>& get_decisions() const { return d_decisions; }
 
@@ -288,29 +294,22 @@ class CadicalPropagator : public CaDiCaL::ExternalPropagator
   std::unordered_set<SatVariable> d_decision_vars;
 };
 
-CDCLTCadicalSolver::CDCLTCadicalSolver(Env& env,
-                                       StatisticsRegistry& registry,
-                                       const std::string& name)
-    : CadicalSolver(registry, name), EnvObj(env), d_context(nullptr)
-{
-}
-
-void CDCLTCadicalSolver::initialize(context::Context* context,
-                                    prop::TheoryProxy* theoryProxy,
-                                    context::UserContext* userContext,
-                                    ProofNodeManager* pnm)
+void CadicalSolver::initialize(context::Context* context,
+                               prop::TheoryProxy* theoryProxy,
+                               context::UserContext* userContext,
+                               ProofNodeManager* pnm)
 {
   d_context = context;
   d_proxy = theoryProxy;
   d_propagator.reset(new CadicalPropagator(theoryProxy));
 }
 
-void CDCLTCadicalSolver::push()
+void CadicalSolver::push()
 {
   d_context->push();  // SAT context for cvc5
 }
 
-void CDCLTCadicalSolver::pop()
+void CadicalSolver::pop()
 {
   // TODO
   // Notify sat proof manager that we have popped and now potentially we need to
@@ -323,30 +322,23 @@ void CDCLTCadicalSolver::pop()
   d_context->pop();  // SAT context for cvc5
 }
 
-void CDCLTCadicalSolver::resetTrail() {}
+void CadicalSolver::resetTrail() {}
 
-bool CDCLTCadicalSolver::properExplanation(SatLiteral lit,
-                                           SatLiteral expl) const
-{
-}
+void CadicalSolver::requirePhase(SatLiteral lit) {}
 
-void CDCLTCadicalSolver::requirePhase(SatLiteral lit) {}
-
-bool CDCLTCadicalSolver::isDecision(SatVariable var) const
+bool CadicalSolver::isDecision(SatVariable var) const
 {
   return d_propagator->is_decision(var);
 }
 
-std::vector<SatLiteral> CDCLTCadicalSolver::getDecisions() const
+std::vector<SatLiteral> CadicalSolver::getDecisions() const
 {
   return d_propagator->get_decisions();
 }
 
-std::vector<Node> CDCLTCadicalSolver::getOrderHeap() const { return {}; }
+std::vector<Node> CadicalSolver::getOrderHeap() const { return {}; }
 
-int32_t CDCLTCadicalSolver::getDecisionLevel(SatVariable v) const {}
-
-int32_t CDCLTCadicalSolver::getIntroLevel(SatVariable v) const {}
+int32_t CadicalSolver::getIntroLevel(SatVariable v) const {}
 
 std::shared_ptr<ProofNode> CDCLTgetProof()
 {

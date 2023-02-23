@@ -28,16 +28,16 @@
 namespace cvc5::internal {
 namespace prop {
 
-class CDCLTCadicalSolver;
 class CadicalPropagator;
 
-class CadicalSolver : public SatSolver
+class CadicalSolver : public CDCLTSatSolver, protected EnvObj
 {
   friend class SatSolverFactory;
-  friend class CDCLTCadicalSolver;
 
  public:
   ~CadicalSolver() override;
+
+  /* SatSolver interface -------------------------------------------------- */
 
   ClauseId addClause(SatClause& clause, bool removable) override;
 
@@ -65,12 +65,43 @@ class CadicalSolver : public SatSolver
 
   bool ok() const override;
 
- protected:
+  /* CDCLTSatSolver interface --------------------------------------------- */
+
+  void initialize(context::Context* context,
+                  prop::TheoryProxy* theoryProxy,
+                  context::UserContext* userContext,
+                  ProofNodeManager* pnm) override;
+  void push() override;
+
+  void pop() override;
+
+  void resetTrail() override;
+
+  void requirePhase(SatLiteral lit) override;
+
+  bool isDecision(SatVariable var) const override;
+
+  std::vector<SatLiteral> getDecisions() const override;
+
+  std::vector<Node> getOrderHeap() const override;
+
+  int32_t getIntroLevel(SatVariable v) const override;
+
+  std::shared_ptr<ProofNode> getProof() override;
+
+ private:
   /**
+   * Constructor.
    * Private to disallow creation outside of SatSolverFactory.
    * Function init() must be called after creation.
+   * @param env      The associated environment.
+   * @param registry The associated statistics registry.
+   * @param name     The name of the SAT solver.
    */
-  CadicalSolver(StatisticsRegistry& registry, const std::string& name = "");
+  CadicalSolver(Env& env,
+                StatisticsRegistry& registry,
+                const std::string& name = "");
+
   /**
    * Initialize SAT solver instance.
    * Note: Split out to not call virtual functions in constructor.
@@ -79,11 +110,21 @@ class CadicalSolver : public SatSolver
 
   /**
    * Set resource limit.
+   * @param resmgr The associated resource manager.
    */
   void setResourceLimit(ResourceManager* resmgr);
 
+  /** The wrapped CaDiCaL instance. */
   std::unique_ptr<CaDiCaL::Solver> d_solver;
+  /** The CaDiCaL terminator (for termination via resource manager). */
   std::unique_ptr<CaDiCaL::Terminator> d_terminator;
+
+  /** Context for synchronizing the SAT solver when in CDCL(T) mode. */
+  context::Context* d_context = nullptr;
+  /** The associated theory proxy (for CDCL(T) mode). */
+  prop::TheoryProxy* d_proxy = nullptr;
+  /** The CaDiCaL propagator (for CDCL(T) mode). */
+  std::unique_ptr<CadicalPropagator> d_propagator;
 
   /**
    * Stores the current set of assumptions provided via solve() and is used to
@@ -106,57 +147,6 @@ class CadicalSolver : public SatSolver
   };
 
   Statistics d_statistics;
-};
-
-class CDCLTCadicalSolver : public CadicalSolver,
-                           public CDCLTSatSolver,
-                           protected EnvObj
-{
-  friend class SatSolverFactory;
-
- public:
-  void initialize(context::Context* context,
-                  prop::TheoryProxy* theoryProxy,
-                  context::UserContext* userContext,
-                  ProofNodeManager* pnm) override;
-  void push() override;
-
-  void pop() override;
-
-  void resetTrail() override;
-
-  bool properExplanation(SatLiteral lit, SatLiteral expl) const override;
-
-  void requirePhase(SatLiteral lit) override;
-
-  bool isDecision(SatVariable var) const override;
-
-  std::vector<SatLiteral> getDecisions() const override;
-
-  std::vector<Node> getOrderHeap() const override;
-
-  int32_t getDecisionLevel(SatVariable v) const override;
-
-  int32_t getIntroLevel(SatVariable v) const override;
-
-  std::shared_ptr<ProofNode> getProof() override;
-
- private:
-  /**
-   * Private to disallow creation outside of SatSolverFactory.
-   * Function init() must be called after creation.
-   */
-  CDCLTCadicalSolver(Env& env,
-                     StatisticsRegistry& registry,
-                     const std::string& name = "");
-
-  /** Context for synchronizing the SAT solver */
-  context::Context* d_context = nullptr;
-  /** The associated theory proxy. */
-  prop::TheoryProxy* d_proxy = nullptr;
-
-  /** The CaDiCaL propagator. */
-  std::unique_ptr<CadicalPropagator> d_propagator;
 };
 
 }  // namespace prop
