@@ -266,7 +266,7 @@ class CadicalPropagator : public CaDiCaL::ExternalPropagator
 
   bool cb_check_found_model(const std::vector<int>& model) override
   {
-    return false;
+    return true;
   }
 
   // int cb_decide () override;
@@ -289,8 +289,15 @@ class CadicalPropagator : public CaDiCaL::ExternalPropagator
  private:
   /** The associated theory proxy. */
   prop::TheoryProxy* d_proxy = nullptr;
+  /** The current trail of decisions. */
   std::vector<SatLiteral> d_decisions;
+  /**
+   * The control stack for d_decisions, manages decision levels. Each element
+   * of the vector stores the index of the start of the next decision level.
+   * If empty, decision level is 0.
+   */
   std::vector<size_t> d_decisions_control;
+  /** The set of decision variables. */
   std::unordered_set<SatVariable> d_decision_vars;
 };
 
