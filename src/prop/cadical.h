@@ -22,6 +22,7 @@
 
 #include <cadical.hpp>
 
+#include "context/cdhashset.h"
 #include "prop/sat_solver.h"
 #include "smt/env_obj.h"
 
@@ -89,6 +90,8 @@ class CadicalSolver : public CDCLTSatSolver, protected EnvObj
 
   std::shared_ptr<ProofNode> getProof() override;
 
+  bool isTheoryAtom(SatVariable var) const;
+
  private:
   /**
    * Constructor.
@@ -114,6 +117,8 @@ class CadicalSolver : public CDCLTSatSolver, protected EnvObj
    */
   void setResourceLimit(ResourceManager* resmgr);
 
+  SatValue _solve(const std::vector<SatLiteral>& assumptions);
+
   /** The wrapped CaDiCaL instance. */
   std::unique_ptr<CaDiCaL::Solver> d_solver;
   /** The CaDiCaL terminator (for termination via resource manager). */
@@ -133,9 +138,12 @@ class CadicalSolver : public CDCLTSatSolver, protected EnvObj
   std::vector<SatLiteral> d_assumptions;
 
   unsigned d_nextVarIdx;
+  std::vector<bool> d_isTheoryAtom;
+  context::CDHashSet<SatVariable> d_observedVars;
   bool d_inSatMode;
   SatVariable d_true;
   SatVariable d_false;
+  uint32_t d_assertionLevel;
 
   struct Statistics
   {
