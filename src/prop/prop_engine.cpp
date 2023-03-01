@@ -83,8 +83,13 @@ PropEngine::PropEngine(Env& env, TheoryEngine* te)
   context::UserContext* userContext = d_env.getUserContext();
   ProofNodeManager* pnm = d_env.getProofNodeManager();
 
+#if 1
   d_satSolver = SatSolverFactory::createCadical(
       d_env, statisticsRegistry(), env.getResourceManager());
+#else
+  d_satSolver =
+      SatSolverFactory::createCDCLTMinisat(d_env, statisticsRegistry());
+#endif
 
   // CNF stream and theory proxy required pointers to each other, make the
   // theory proxy first
