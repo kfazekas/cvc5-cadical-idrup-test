@@ -72,6 +72,7 @@ class CadicalPropagator : public CaDiCaL::ExternalPropagator
       : d_proxy(proxy),
         d_context(*context),
         d_solver(solver),
+        d_decisions(&d_propagator_ctx),
         d_assignments(&d_propagator_ctx)
 
   {
@@ -80,21 +81,24 @@ class CadicalPropagator : public CaDiCaL::ExternalPropagator
   /** Store current assignment, notify theories of assigned theory literals. */
   void notify_assignment(int lit, bool is_fixed) override
   {
-    // First assignment of current decision level is the decision.
-    bool is_decision = !d_decisions_control.empty()
-                       && d_decisions.size() == d_decisions_control.back();
-    Trace("cadical::propagator")
-        << "notif::assignment: [" << (is_decision ? "d" : "p") << "] " << lit
-        << " (fixed: " << is_fixed << ", level: " << d_decisions_control.size()
-        << ")" << std::endl;
-
     SatLiteral slit = toSatLiteral(lit);
-    if (is_decision)
+    SatVariable var = slit.getSatVariable();
+    if (!d_solver.isTheoryAtom(var))
+    {
+      return;
+    }
+
+    Trace("cadical::propagator")
+        << "notif::assignment: [" << (d_solver.isDecision(var) ? "d" : "p")
+        << "] " << lit << " (fixed: " << is_fixed
+        << ", level: " << d_propagator_ctx.getLevel() << ")" << std::endl;
+
+    // Save decision variables
+    if (d_solver.isDecision(var))
     {
       d_decisions.push_back(slit);
-      d_decision_vars.insert(slit.getSatVariable());
     }
-    SatVariable var = slit.getSatVariable();
+
     if (is_fixed)
     {
       // Fixed, not unassigned on backtrack
@@ -107,7 +111,7 @@ class CadicalPropagator : public CaDiCaL::ExternalPropagator
       Assert(d_assignments.find(var) == d_assignments.end());
       d_assignments.insert(var, lit);
     }
-    if (d_solver.isTheoryAtom(var))
+    // if (d_solver.isTheoryAtom(var))
     {
       d_proxy->enqueueTheoryLiteral(slit);
       if (is_fixed)
@@ -120,12 +124,11 @@ class CadicalPropagator : public CaDiCaL::ExternalPropagator
   /** Push new decision level. */
   void notify_new_decision_level() override
   {
-    d_decisions_control.push_back(d_decisions.size());
-    Trace("cadical::propagator") << "notif::decision: new level "
-                                 << d_decisions_control.size() << std::endl;
     // d_fixed_literals_control.push_back(d_fixed_literals.size());
     d_context.push();
     d_propagator_ctx.push();
+    Trace("cadical::propagator") << "notif::decision: new level "
+                                 << d_propagator_ctx.getLevel() << std::endl;
   }
 
   /** Backtrack to given level. */
@@ -134,27 +137,14 @@ class CadicalPropagator : public CaDiCaL::ExternalPropagator
     Trace("cadical::propagator") << "notif::backtrack: " << level << std::endl;
     Assert(d_proxy);
 
-    size_t cur_level = d_decisions_control.size();
-    Assert(cur_level > level);
-    // TODO: Maybe use a CDHashSet for decisions?
-    for (; cur_level > level; --cur_level)
+    Assert(d_propagator_ctx.getLevel() > level);
+    for (size_t cur_level = d_propagator_ctx.getLevel(); cur_level > level;
+         --cur_level)
     {
-      size_t idx = d_decisions_control.back();
-      d_decisions_control.pop_back();
       d_context.pop();
       d_propagator_ctx.pop();
-      for (size_t i = 0, n = d_decisions.size() - idx; i < n; ++i)
-      {
-        SatLiteral slit = d_decisions.back();
-        Trace("cadical::propagate")
-            << "notif::backtrack: " << slit << std::endl;
-        d_decisions.pop_back();
-        auto it = d_decision_vars.find(slit.getSatVariable());
-        Assert(it != d_decision_vars.end());
-        d_decision_vars.erase(*it);
-      }
-      Assert(d_decisions.size() == idx);
     }
+
     d_proxy->notifyBacktrack(level);
     d_propagations.clear();  // TODO: confirm that we have to clear here
 
@@ -251,11 +241,9 @@ class CadicalPropagator : public CaDiCaL::ExternalPropagator
     return lit;
   }
 
-  const std::vector<SatLiteral>& get_decisions() const { return d_decisions; }
-
-  bool is_decision(const SatVariable& var)
+  const context::CDList<SatLiteral>& get_decisions() const
   {
-    return d_decision_vars.find(var) != d_decision_vars.end();
+    return d_decisions;
   }
 
   /** Get the current assignment of lit. */
@@ -345,16 +333,7 @@ class CadicalPropagator : public CaDiCaL::ExternalPropagator
    * d_context, which also includes the user context.
    */
   context::Context d_propagator_ctx;
-  /** The current trail of decisions. */
-  std::vector<SatLiteral> d_decisions;
-  /**
-   * The control stack for d_decisions, manages decision levels. Each element
-   * of the vector stores the index of the start of the next decision level.
-   * If empty, decision level is 0.
-   */
-  std::vector<size_t> d_decisions_control;
-  /** The set of decision variables. */
-  std::unordered_set<SatVariable> d_decision_vars;
+  context::CDList<SatLiteral> d_decisions;
   /**
    * Current fixed variable assignment. Permanent, will not change when
    * backtracking.
@@ -520,6 +499,12 @@ SatVariable CadicalSolver::newVar(bool isTheoryAtom, bool canErase)
   }
   else
   {
+    // Mark variable as observed if created during search to freeze variable.
+    // TODO: can we unobserve them search is done?
+    if (d_in_search)
+    {
+      d_solver->add_observed_var(d_nextVarIdx);
+    }
     // std::cout << "new var: " << d_nextVarIdx << std::endl;
   }
   return d_nextVarIdx++;
@@ -624,12 +609,17 @@ void CadicalSolver::requirePhase(SatLiteral lit)
 
 bool CadicalSolver::isDecision(SatVariable var) const
 {
-  return d_propagator->is_decision(var);
+  return d_solver->is_decision(toCadicalVar(var));
 }
 
 std::vector<SatLiteral> CadicalSolver::getDecisions() const
 {
-  return d_propagator->get_decisions();
+  std::vector<SatLiteral> decisions;
+  for (const SatLiteral& lit : d_propagator->get_decisions())
+  {
+    decisions.push_back(lit);
+  }
+  return decisions;
 }
 
 std::vector<Node> CadicalSolver::getOrderHeap() const { return {}; }
