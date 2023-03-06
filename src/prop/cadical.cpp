@@ -90,7 +90,7 @@ class CadicalPropagator : public CaDiCaL::ExternalPropagator
 
     Trace("cadical::propagator")
         << "notif::assignment: [" << (d_solver.isDecision(var) ? "d" : "p")
-        << "] " << lit << " (fixed: " << is_fixed
+        << "] " << slit << " (fixed: " << is_fixed
         << ", level: " << d_propagator_ctx.getLevel() << ")" << std::endl;
 
     // Save decision variables
@@ -99,26 +99,21 @@ class CadicalPropagator : public CaDiCaL::ExternalPropagator
       d_decisions.push_back(slit);
     }
 
+    Assert(d_fixed_assignments.find(var) == d_fixed_assignments.end());
+    Assert(d_assignments.find(var) == d_assignments.end());
     if (is_fixed)
     {
       // Fixed, not unassigned on backtrack
-      Assert(d_fixed_assignments.find(var) == d_fixed_assignments.end());
       d_fixed_assignments.emplace(var, lit);
+      d_fixed_literals.push_back(slit);
     }
     else
     {
       // Unassigned on backtrack
-      Assert(d_assignments.find(var) == d_assignments.end());
       d_assignments.insert(var, lit);
     }
-    // if (d_solver.isTheoryAtom(var))
-    {
-      d_proxy->enqueueTheoryLiteral(slit);
-      if (is_fixed)
-      {
-        d_fixed_literals.push_back(slit);
-      }
-    }
+
+    d_proxy->enqueueTheoryLiteral(slit);
   }
 
   /** Push new decision level. */
@@ -209,7 +204,7 @@ class CadicalPropagator : public CaDiCaL::ExternalPropagator
       d_reason.insert(d_reason.end(), clause.begin(), clause.end());
       d_processing_reason = true;
       Trace("cadical::propagator")
-          << "cb::reason: " << propagated_lit << ", size: " << d_reason.size()
+          << "cb::reason: " << slit << ", size: " << d_reason.size()
           << std::endl;
     }
 
@@ -221,8 +216,9 @@ class CadicalPropagator : public CaDiCaL::ExternalPropagator
     }
 
     // Return next literal of the reason for propagated_lit.
-    Trace("cadical::propagator") << "cb::reason: " << propagated_lit << " "
-                                 << d_reason.front() << std::endl;
+    Trace("cadical::propagator")
+        << "cb::reason: " << toSatLiteral(propagated_lit) << " "
+        << d_reason.front() << std::endl;
     int lit = toCadicalLit(d_reason.front());
     d_reason.erase(d_reason.begin());
     return lit;
@@ -265,7 +261,7 @@ class CadicalPropagator : public CaDiCaL::ExternalPropagator
       }
     }
     Trace("cadical::propagator")
-        << "value: " << var << ": " << val << std::endl;
+        << "value: " << lit << ": " << val << std::endl;
     return val;
   }
 
@@ -390,7 +386,7 @@ void CadicalSolver::init()
   d_solver->set("walk", 0);
   d_solver->set("lucky", 0);
 
-  d_solver->set("quiet", 1);  // CaDiCaL is verbose by default
+  d_solver->set("log", 1);  // CaDiCaL is verbose by default
   d_solver->add(toCadicalVar(d_true));
   d_solver->add(0);
   d_solver->add(-toCadicalVar(d_false));
@@ -634,11 +630,11 @@ std::shared_ptr<ProofNode> CadicalSolver::getProof()
 
 bool CadicalSolver::isTheoryAtom(SatVariable var) const
 {
-  auto it = d_observedVars.find(var);
-  if (it == d_observedVars.end())
-  {
-    return false;
-  }
+  //auto it = d_observedVars.find(var);
+  //if (it == d_observedVars.end())
+  //{
+  //  return false;
+  //}
   Assert(var < d_isTheoryAtom.size());
   return d_isTheoryAtom[var];
 }
