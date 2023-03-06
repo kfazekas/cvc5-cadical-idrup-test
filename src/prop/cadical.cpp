@@ -162,6 +162,26 @@ class CadicalPropagator : public CaDiCaL::ExternalPropagator
     Trace("cadical::propagator") << "cb::check_found_model" << std::endl;
     d_proxy->theoryCheck(theory::Theory::Effort::EFFORT_FULL);
     theory_propagate();
+    if (!d_propagations.empty())
+    {
+      for (const SatLiteral& p : d_propagations)
+      {
+        // Only send propagations that are conflicting with current assignment.
+        if (value(p) == SatValue::SAT_VALUE_FALSE)
+        {
+          Trace("cadical::propagator")
+              << "add propagation reason: " << p << std::endl;
+          SatClause clause;
+          d_proxy->explainPropagation(p, clause);
+          for (const SatLiteral& l : clause)
+          {
+            d_new_clauses.push_back(toCadicalLit(l));
+          }
+          d_new_clauses.push_back(0);
+        }
+      }
+      d_propagations.clear();
+    }
     bool res = done();
     Trace("cadical::propagator")
         << "cb::check_found_model end: done: " << res << std::endl;
@@ -284,7 +304,7 @@ class CadicalPropagator : public CaDiCaL::ExternalPropagator
    */
   bool done() const
   {
-    bool res = !d_proxy->theoryNeedCheck()  //&& d_propagated_literals.empty()
+    bool res = !d_proxy->theoryNeedCheck() && d_propagations.empty()
                && d_new_clauses.empty();
     Trace("cadical::propagator") << "done: " << res << std::endl;
     return res;
@@ -314,7 +334,6 @@ class CadicalPropagator : public CaDiCaL::ExternalPropagator
     SatLiteral next = d_propagations.front();
     d_propagations.erase(d_propagations.begin());
     Trace("cadical::propagator") << "propagate: " << next << std::endl;
-    Trace("cadical::propagator") << "cb::propagate end" << std::endl;
     return toCadicalLit(next);
   }
 
@@ -386,7 +405,7 @@ void CadicalSolver::init()
   d_solver->set("walk", 0);
   d_solver->set("lucky", 0);
 
-  d_solver->set("log", 1);  // CaDiCaL is verbose by default
+  d_solver->set("quiet", 1);  // CaDiCaL is verbose by default
   d_solver->add(toCadicalVar(d_true));
   d_solver->add(0);
   d_solver->add(-toCadicalVar(d_false));
@@ -495,14 +514,14 @@ SatVariable CadicalSolver::newVar(bool isTheoryAtom, bool canErase)
   }
   else
   {
-    // Mark variable as observed if created during search to freeze variable.
-    // TODO: can we unobserve them search is done?
-    if (d_in_search)
-    {
-      d_solver->add_observed_var(d_nextVarIdx);
-    }
-    // std::cout << "new var: " << d_nextVarIdx << std::endl;
+    // Boolean variables are not theory atoms, but may still occur in
+    // lemmas/conflicts sent to the SAT solver. Hence, we have to observe them
+    // since CaDiCaL expects all literals sent back to be observed.
+    d_solver->add_observed_var(d_nextVarIdx);
   }
+  Trace("cadical::propagator")
+      << "new var: " << d_nextVarIdx << " (theoryAtom: " << isTheoryAtom
+      << ", inSearch: " << d_in_search << ")" << std::endl;
   return d_nextVarIdx++;
 }
 
