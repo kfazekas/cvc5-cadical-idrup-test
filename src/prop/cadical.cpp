@@ -453,14 +453,6 @@ SatValue CadicalSolver::_solve(const std::vector<SatLiteral>& assumptions)
   res = toSatValue(d_solver->solve());
   d_in_search = false;
   ++d_statistics.d_numSatCalls;
-  if (d_propagator)
-  {
-    Trace("cadical::propagator") << "SOLVE done" << std::endl;
-    Trace("cadical::propagator")
-        << "PROPAGATOR done: " << d_propagator->done() << std::endl;
-  }
-  // Assert(d_propagator->done());
-  //  TODO: reset propagator state?
   d_inSatMode = (res == SAT_VALUE_TRUE);
   return res;
 }
@@ -469,7 +461,7 @@ SatValue CadicalSolver::_solve(const std::vector<SatLiteral>& assumptions)
 
 ClauseId CadicalSolver::addClause(SatClause& clause, bool removable)
 {
-  if (TraceIsOn("cadical::propagator"))
+  if (d_propagator && TraceIsOn("cadical::propagator"))
   {
     Trace("cadical::propagator") << "addClause:";
     for (const SatLiteral& lit : clause)
@@ -506,22 +498,25 @@ SatVariable CadicalSolver::newVar(bool isTheoryAtom, bool canErase)
   ++d_statistics.d_numVariables;
   Assert(d_isTheoryAtom.size() == d_nextVarIdx);
   d_isTheoryAtom.push_back(isTheoryAtom);
-  if (isTheoryAtom)
+  if (d_propagator)
   {
-    d_observedVars.insert(d_nextVarIdx);
-    d_solver->add_observed_var(d_nextVarIdx);
-    // std::cout << "new theory atom var: " << d_nextVarIdx << std::endl;
+    if (isTheoryAtom)
+    {
+      d_observedVars.insert(d_nextVarIdx);
+      d_solver->add_observed_var(d_nextVarIdx);
+      // std::cout << "new theory atom var: " << d_nextVarIdx << std::endl;
+    }
+    else
+    {
+      // Boolean variables are not theory atoms, but may still occur in
+      // lemmas/conflicts sent to the SAT solver. Hence, we have to observe them
+      // since CaDiCaL expects all literals sent back to be observed.
+      d_solver->add_observed_var(d_nextVarIdx);
+    }
+    Trace("cadical::propagator")
+        << "new var: " << d_nextVarIdx << " (theoryAtom: " << isTheoryAtom
+        << ", inSearch: " << d_in_search << ")" << std::endl;
   }
-  else
-  {
-    // Boolean variables are not theory atoms, but may still occur in
-    // lemmas/conflicts sent to the SAT solver. Hence, we have to observe them
-    // since CaDiCaL expects all literals sent back to be observed.
-    d_solver->add_observed_var(d_nextVarIdx);
-  }
-  Trace("cadical::propagator")
-      << "new var: " << d_nextVarIdx << " (theoryAtom: " << isTheoryAtom
-      << ", inSearch: " << d_in_search << ")" << std::endl;
   return d_nextVarIdx++;
 }
 
