@@ -72,8 +72,7 @@ class CadicalPropagator : public CaDiCaL::ExternalPropagator
       : d_proxy(proxy),
         d_context(*context),
         d_solver(solver),
-        d_decisions(&d_propagator_ctx),
-        d_assignments(&d_propagator_ctx)
+        d_decisions(&d_propagator_ctx)
   {
     d_var_info.emplace_back();  // 0: Not used
     d_var_info.emplace_back();  // 1: True
@@ -104,22 +103,14 @@ class CadicalPropagator : public CaDiCaL::ExternalPropagator
       d_decisions.push_back(slit);
     }
 
-    // Assert(d_fixed_assignments.find(var) == d_fixed_assignments.end());
-    Assert(d_assignments.find(var) == d_assignments.end() || is_fixed);
+    Assert(d_var_info[var].assignment == 0 || d_var_info[var].assignment == lit);
     if (is_fixed)
     {
-      // Fixed, not unassigned on backtrack
-      // d_fixed_assignments.emplace(var, lit);
-      d_fixed_literals.push_back(slit);
+      Assert(!d_var_info[var].is_fixed);
       d_var_info[var].is_fixed = true;
-      Assert(d_var_info[var].assignment == 0);
-      d_var_info[var].assignment = lit;
     }
-    else
-    {
-      // Unassigned on backtrack
-      d_assignments.insert(var, lit);
-    }
+    d_var_info[var].assignment = lit;
+    d_assignments.push_back(slit);
 
     d_proxy->enqueueTheoryLiteral(slit);
   }
@@ -130,6 +121,7 @@ class CadicalPropagator : public CaDiCaL::ExternalPropagator
     // d_fixed_literals_control.push_back(d_fixed_literals.size());
     d_context.push();
     d_propagator_ctx.push();
+    d_assignment_control.push_back(d_assignments.size());
     Trace("cadical::propagator") << "notif::decision: new level "
                                  << d_propagator_ctx.getLevel() << std::endl;
   }
@@ -154,14 +146,43 @@ class CadicalPropagator : public CaDiCaL::ExternalPropagator
       d_propagator_ctx.pop();
     }
 
-    d_proxy->notifyBacktrack(level);
-    d_propagations.clear();  // TODO: confirm that we have to clear here
+    // Backtrack assignments, resend fixed theory literals that got backtracked
+    Assert(!d_assignment_control.empty());
+    size_t pop_to = d_assignment_control[level];
+    d_assignment_control.resize(level);
 
-    // TODO: re-enqueue theory literals that were fixed in backtracked levels
-    //       instead of enqueuing all fixed again
-    for (const SatLiteral& lit : d_fixed_literals)
+    std::vector<SatLiteral> reenqueue_fixed;
+    while (pop_to < d_assignments.size())
     {
+      SatLiteral lit = d_assignments.back();
+      d_assignments.pop_back();
+      SatVariable var = lit.getSatVariable();
+      auto& info = d_var_info[var];
+      if (info.is_fixed)
+      {
+        if (info.is_theory_atom)
+        {
+          reenqueue_fixed.push_back(lit);
+        }
+      }
+      else
+      {
+        Trace("cadical::propagator") << "unassign: " << var << std::endl;
+        info.assignment = 0;
+      }
+    }
+
+    d_proxy->notifyBacktrack(level);
+    d_propagations.clear();
+
+    // Re-enqueue fixed theory literals that got removed.
+    for (auto it = reenqueue_fixed.rbegin(), end = reenqueue_fixed.rend();
+         it != end;
+         ++it)
+    {
+      SatLiteral lit = *it;
       d_proxy->enqueueTheoryLiteral(lit);
+      d_assignments.push_back(lit);
     }
     Trace("cadical::propagator") << "notif::backtrack end" << std::endl;
   }
@@ -292,15 +313,9 @@ class CadicalPropagator : public CaDiCaL::ExternalPropagator
   {
     SatVariable var = lit.getSatVariable();
     SatValue val = SAT_VALUE_UNKNOWN;
-    auto it = d_assignments.find(var);
-    if (it != d_assignments.end())
+    int32_t assign = d_var_info[var].assignment;
+    if (assign != 0)
     {
-      val = toSatValueLit(lit.isNegated() ? -it->second : it->second);
-    }
-    else if (d_var_info[var].is_fixed)
-    {
-      int32_t assign = d_var_info[var].assignment;
-      Assert(assign != 0);
       val = toSatValueLit(lit.isNegated() ? -assign : assign);
     }
     Trace("cadical::propagator")
@@ -316,7 +331,6 @@ class CadicalPropagator : public CaDiCaL::ExternalPropagator
    */
   void add_clause(const SatClause& clause)
   {
-    Trace("cadical::propagator") << "push new clause:";
     std::vector<CadicalLit> lits;
     for (const SatLiteral& lit : clause)
     {
@@ -467,7 +481,9 @@ class CadicalPropagator : public CaDiCaL::ExternalPropagator
   context::Context d_propagator_ctx;
   context::CDList<SatLiteral> d_decisions;
   /** Current non-fixed variable assignment. */
-  context::CDHashMap<SatVariable, int32_t> d_assignments;
+  //context::CDHashMap<SatVariable, int32_t> d_assignments;
+  std::vector<SatLiteral> d_assignments;
+  std::vector<size_t> d_assignment_control;
   /** Used by cb_propagate() to return propagated literals. */
   std::vector<SatLiteral> d_propagations;
 
@@ -497,7 +513,7 @@ class CadicalPropagator : public CaDiCaL::ExternalPropagator
    * Stores all fixed theory literals. Needed to re-enqueue theory literals
    * when backtracking.
    */
-  std::vector<SatLiteral> d_fixed_literals;
+  //std::vector<SatLiteral> d_fixed_literals;
   // std::vector<size_t> d_fixed_literals_control;
   /**
    * Flag indicating whether cb_add_reason_clause_lit() is currently
