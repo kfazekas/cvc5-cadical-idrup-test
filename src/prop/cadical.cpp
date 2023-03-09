@@ -68,7 +68,7 @@ class CadicalPropagator : public CaDiCaL::ExternalPropagator
  public:
   CadicalPropagator(prop::TheoryProxy* proxy,
                     context::Context* context,
-                    const CadicalSolver& solver)
+                    CaDiCaL::Solver& solver)
       : d_proxy(proxy),
         d_context(*context),
         d_solver(solver),
@@ -76,6 +76,9 @@ class CadicalPropagator : public CaDiCaL::ExternalPropagator
         d_assignments(&d_propagator_ctx)
 
   {
+    d_var_info.push_back({false, false});  // 0: Not used
+    d_var_info.push_back({false, false});  // 1: True
+    d_var_info.push_back({false, false});  // 2: False
   }
 
   /** Store current assignment, notify theories of assigned theory literals. */
@@ -83,18 +86,21 @@ class CadicalPropagator : public CaDiCaL::ExternalPropagator
   {
     SatLiteral slit = toSatLiteral(lit);
     SatVariable var = slit.getSatVariable();
-    if (!d_solver.isTheoryAtom(var))
+    Assert(var < d_var_info.size());
+    if (!d_var_info[var].is_theory_atom)
     {
       return;
     }
 
+    bool is_decision = d_solver.is_decision(lit);
+
     Trace("cadical::propagator")
-        << "notif::assignment: [" << (d_solver.isDecision(var) ? "d" : "p")
-        << "] " << slit << " (fixed: " << is_fixed
-        << ", level: " << d_propagator_ctx.getLevel() << ")" << std::endl;
+        << "notif::assignment: [" << (is_decision ? "d" : "p") << "] " << slit
+        << " (fixed: " << is_fixed << ", level: " << d_propagator_ctx.getLevel()
+        << ")" << std::endl;
 
     // Save decision variables
-    if (d_solver.isDecision(var))
+    if (is_decision)
     {
       d_decisions.push_back(slit);
     }
@@ -160,27 +166,28 @@ class CadicalPropagator : public CaDiCaL::ExternalPropagator
   bool cb_check_found_model(const std::vector<int>& model) override
   {
     Trace("cadical::propagator") << "cb::check_found_model" << std::endl;
+    bool one_more_check = true;
+
+  ONE_MORE:
     d_proxy->theoryCheck(theory::Theory::Effort::EFFORT_FULL);
     theory_propagate();
-    if (!d_propagations.empty())
+    for (const SatLiteral& p : d_propagations)
     {
-      for (const SatLiteral& p : d_propagations)
+      Trace("cadical::propagator")
+          << "add propagation reason: " << p << std::endl;
+      SatClause clause;
+      d_proxy->explainPropagation(p, clause);
+      for (const SatLiteral& l : clause)
       {
-        // Only send propagations that are conflicting with current assignment.
-        if (value(p) == SatValue::SAT_VALUE_FALSE)
-        {
-          Trace("cadical::propagator")
-              << "add propagation reason: " << p << std::endl;
-          SatClause clause;
-          d_proxy->explainPropagation(p, clause);
-          for (const SatLiteral& l : clause)
-          {
-            d_new_clauses.push_back(toCadicalLit(l));
-          }
-          d_new_clauses.push_back(0);
-        }
+        d_new_clauses.push_back(toCadicalLit(l));
       }
-      d_propagations.clear();
+      d_new_clauses.push_back(0);
+    }
+    d_propagations.clear();
+    if (one_more_check && d_proxy->theoryNeedCheck() && d_new_clauses.empty())
+    {
+      one_more_check = false;
+      goto ONE_MORE;
     }
     bool res = done();
     Trace("cadical::propagator")
@@ -200,6 +207,10 @@ class CadicalPropagator : public CaDiCaL::ExternalPropagator
    * Perform standard theory check and theory propagation, return next theory
    * propagation.
    */
+  // theory propagation
+  // -> new propagations
+  // -> no new clauses?
+  // -> no new vars?
   int cb_propagate() override
   {
     Trace("cadical::propagator") << "cb::propagate" << std::endl;
@@ -250,6 +261,7 @@ class CadicalPropagator : public CaDiCaL::ExternalPropagator
   /** Add next clause literal to the SAT solver. */
   int cb_add_external_clause_lit() override
   {
+    add_new_vars();
     Assert(!d_new_clauses.empty());
     CadicalLit lit = d_new_clauses.front();
     d_new_clauses.erase(d_new_clauses.begin());
@@ -298,6 +310,28 @@ class CadicalPropagator : public CaDiCaL::ExternalPropagator
     d_new_clauses.push_back(0);
   }
 
+  void add_new_var(const SatVariable& var, bool is_theory_atom, bool in_search)
+  {
+    Assert(d_var_info.size() == var);
+    bool is_observed = !in_search;
+
+    // Boolean variables are not theory atoms, but may still occur in
+    // lemmas/conflicts sent to the SAT solver. Hence, we have to observe them
+    // since CaDiCaL expects all literals sent back to be observed.
+    if (in_search)
+    {
+      d_new_vars.push_back(var);
+    }
+    else
+    {
+      d_solver.add_observed_var(toCadicalVar(var));
+    }
+    Trace("cadical::propagator")
+        << "new var: " << var << " (theoryAtom: " << is_theory_atom
+        << ", inSearch: " << in_search << ")" << std::endl;
+    d_var_info.push_back({is_theory_atom, is_observed});
+  }
+
   /**
    * Checks whether the theory engine is done and the current model is
    * consistent.
@@ -318,9 +352,22 @@ class CadicalPropagator : public CaDiCaL::ExternalPropagator
     d_proxy->theoryPropagate(propagated_lits);
     Trace("cadical::propagator")
         << "new propagations: " << propagated_lits.size() << std::endl;
+
     for (const auto& lit : propagated_lits)
     {
-      d_propagations.push_back(lit);
+      SatVariable var = lit.getSatVariable();
+      if (!d_var_info[var].is_observed)
+      {
+        Trace("cadical::propagator")
+            << "add propagation reason: " << lit << std::endl;
+        SatClause clause;
+        d_proxy->explainPropagation(lit, clause);
+        add_clause(clause);
+      }
+      else
+      {
+        d_propagations.push_back(lit);
+      }
     }
   }
 
@@ -337,11 +384,24 @@ class CadicalPropagator : public CaDiCaL::ExternalPropagator
     return toCadicalLit(next);
   }
 
+  void add_new_vars()
+  {
+    for (size_t i = 0; i < d_new_vars.size(); ++i)
+    {
+      SatVariable var = d_new_vars[i];
+      Assert(d_var_info[var].is_observed == false);
+      Trace("cadical::propagator") << "register var: " << var << std::endl;
+      d_solver.add_observed_var(toCadicalVar(var));
+      d_var_info[var].is_observed = true;
+    }
+    d_new_vars.clear();
+  }
+
   /** The associated theory proxy. */
   prop::TheoryProxy* d_proxy = nullptr;
   /** The SAT context. */
   context::Context& d_context;
-  const CadicalSolver& d_solver;
+  CaDiCaL::Solver& d_solver;
   /**
    * Propagator context used for CD datastructures that are only dependent by
    * decision level or the SAT solver. Note that this is different from the
@@ -364,6 +424,14 @@ class CadicalPropagator : public CaDiCaL::ExternalPropagator
    * cb_add_reason_clause_lit().
    */
   std::vector<CadicalLit> d_new_clauses;
+  std::vector<CadicalVar> d_new_vars;
+
+  struct VarInfo
+  {
+    bool is_theory_atom = false;
+    bool is_observed = false;
+  };
+  std::vector<VarInfo> d_var_info;
   /**
    * Stores all fixed theory literals. Needed to re-enqueue theory literals
    * when backtracking.
@@ -393,7 +461,6 @@ CadicalSolver::CadicalSolver(Env& env,
       d_assertionLevel(0),
       d_statistics(registry, name)
 {
-  d_isTheoryAtom.push_back(false);
 }
 
 void CadicalSolver::init()
@@ -496,26 +563,9 @@ ClauseId CadicalSolver::addXorClause(SatClause& clause,
 SatVariable CadicalSolver::newVar(bool isTheoryAtom, bool canErase)
 {
   ++d_statistics.d_numVariables;
-  Assert(d_isTheoryAtom.size() == d_nextVarIdx);
-  d_isTheoryAtom.push_back(isTheoryAtom);
   if (d_propagator)
   {
-    if (isTheoryAtom)
-    {
-      d_observedVars.insert(d_nextVarIdx);
-      d_solver->add_observed_var(d_nextVarIdx);
-      // std::cout << "new theory atom var: " << d_nextVarIdx << std::endl;
-    }
-    else
-    {
-      // Boolean variables are not theory atoms, but may still occur in
-      // lemmas/conflicts sent to the SAT solver. Hence, we have to observe them
-      // since CaDiCaL expects all literals sent back to be observed.
-      d_solver->add_observed_var(d_nextVarIdx);
-    }
-    Trace("cadical::propagator")
-        << "new var: " << d_nextVarIdx << " (theoryAtom: " << isTheoryAtom
-        << ", inSearch: " << d_in_search << ")" << std::endl;
+    d_propagator->add_new_var(d_nextVarIdx, isTheoryAtom, d_in_search);
   }
   return d_nextVarIdx++;
 }
@@ -585,8 +635,11 @@ void CadicalSolver::initialize(context::Context* context,
 {
   d_context = context;
   d_proxy = theoryProxy;
-  d_propagator.reset(new CadicalPropagator(theoryProxy, context, *this));
+  d_propagator.reset(new CadicalPropagator(theoryProxy, context, *d_solver));
   d_solver->connect_external_propagator(d_propagator.get());
+  // Add d_true/d_false, which were added in init() and may occur in lemmas.
+  d_solver->add_observed_var(1);
+  d_solver->add_observed_var(2);
 }
 
 void CadicalSolver::push()
@@ -640,17 +693,6 @@ std::shared_ptr<ProofNode> CadicalSolver::getProof()
 {
   // TODO
   return nullptr;
-}
-
-bool CadicalSolver::isTheoryAtom(SatVariable var) const
-{
-  //auto it = d_observedVars.find(var);
-  //if (it == d_observedVars.end())
-  //{
-  //  return false;
-  //}
-  Assert(var < d_isTheoryAtom.size());
-  return d_isTheoryAtom[var];
 }
 
 /* -------------------------------------------------------------------------- */

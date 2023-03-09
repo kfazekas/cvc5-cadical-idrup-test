@@ -90,8 +90,6 @@ class CadicalSolver : public CDCLTSatSolver, protected EnvObj
 
   std::shared_ptr<ProofNode> getProof() override;
 
-  bool isTheoryAtom(SatVariable var) const;
-
  private:
   /**
    * Constructor.
@@ -140,7 +138,6 @@ class CadicalSolver : public CDCLTSatSolver, protected EnvObj
   std::vector<SatLiteral> d_assumptions;
 
   unsigned d_nextVarIdx;
-  std::vector<bool> d_isTheoryAtom;
   context::CDHashSet<SatVariable> d_observedVars;
   bool d_inSatMode;
   SatVariable d_true;
