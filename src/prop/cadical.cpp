@@ -83,6 +83,14 @@ class CadicalPropagator : public CaDiCaL::ExternalPropagator
     SatVariable var = slit.getSatVariable();
     Assert(var < d_var_info.size());
 
+    auto& info = d_var_info[var];
+
+    // Only consider active variables
+    if (!info.is_active)
+    {
+      return;
+    }
+
     bool is_decision = d_solver.is_decision(lit);
 
     Trace("cadical::propagator")
@@ -96,25 +104,31 @@ class CadicalPropagator : public CaDiCaL::ExternalPropagator
       d_decisions.back() = slit;
     }
 
-    Assert(d_var_info[var].assignment == 0 || d_var_info[var].assignment == lit);
+    Assert(info.assignment == 0 || info.assignment == lit);
+    Assert(info.assignment == 0 || is_fixed);
     if (is_fixed)
     {
-      Assert(!d_var_info[var].is_fixed);
-      d_var_info[var].is_fixed = true;
+      Assert(!info.is_fixed);
+      info.is_fixed = true;
     }
-    d_var_info[var].assignment = lit;
-    d_assignments.push_back(slit);
-
-    if (d_var_info[var].is_theory_atom)
+    // Only notify theory proxy if variable was assigned a new value, not if it
+    // got fixed after assignment already happend.
+    if (info.assignment == 0)
     {
-      d_proxy->enqueueTheoryLiteral(slit);
+      info.assignment = lit;
+      d_assignments.push_back(slit);
+      if (info.is_theory_atom)
+      {
+        Trace("cadical::propagator") << "enqueue: " << slit << std::endl;
+        Trace("cadical::propagator") << "node:    " << d_proxy->getNode(slit) << std::endl;
+        d_proxy->enqueueTheoryLiteral(slit);
+      }
     }
   }
 
   /** Push new decision level. */
   void notify_new_decision_level() override
   {
-    // d_fixed_literals_control.push_back(d_fixed_literals.size());
     d_context.push();
     d_assignment_control.push_back(d_assignments.size());
     d_decisions.emplace_back();
@@ -158,6 +172,7 @@ class CadicalPropagator : public CaDiCaL::ExternalPropagator
       {
         if (info.is_theory_atom)
         {
+          Assert(info.is_active);
           reenqueue_fixed.push_back(lit);
         }
       }
@@ -177,6 +192,7 @@ class CadicalPropagator : public CaDiCaL::ExternalPropagator
          ++it)
     {
       SatLiteral lit = *it;
+      Trace("cadical::propagator") << "re-enqueue: " << lit << std::endl;
       d_proxy->enqueueTheoryLiteral(lit);
       d_assignments.push_back(lit);
     }
@@ -227,7 +243,6 @@ class CadicalPropagator : public CaDiCaL::ExternalPropagator
   int cb_decide() override
   {
     SatLiteral lit = d_proxy->getNextTheoryDecisionRequest();
-    Trace("cadical::propagator") << "cb::decide: " << lit << std::endl;
     if (lit != undefSatLiteral)
     {
       SatVariable var = lit.getSatVariable();
@@ -235,6 +250,7 @@ class CadicalPropagator : public CaDiCaL::ExternalPropagator
       {
         d_solver.add_observed_var(toCadicalVar(var));
       }
+      Trace("cadical::propagator") << "cb::decide: " << lit << std::endl;
       return toCadicalLit(lit);
     }
     return 0;
@@ -244,10 +260,6 @@ class CadicalPropagator : public CaDiCaL::ExternalPropagator
    * Perform standard theory check and theory propagation, return next theory
    * propagation.
    */
-  // theory propagation
-  // -> new propagations
-  // -> no new clauses?
-  // -> no new vars?
   int cb_propagate() override
   {
     Trace("cadical::propagator") << "cb::propagate" << std::endl;
@@ -395,10 +407,17 @@ class CadicalPropagator : public CaDiCaL::ExternalPropagator
     return res;
   }
 
-  void user_push() { d_active_vars_control.push_back(d_active_vars.size()); }
+  void user_push()
+  {
+    d_active_vars_control.push_back(d_active_vars.size());
+    Trace("cadical::propagator")
+        << "user push: " << d_active_vars_control.size() << std::endl;
+  }
 
   void user_pop()
   {
+    Trace("cadical::propagator")
+        << "user pop: " << d_active_vars_control.size() << std::endl;
     size_t pop_to = d_active_vars_control.back();
     d_active_vars_control.pop_back();
 
@@ -410,8 +429,9 @@ class CadicalPropagator : public CaDiCaL::ExternalPropagator
       SatVariable var = d_active_vars.back();
       d_active_vars.pop_back();
       // FIXME: Do not remove observed variables for now until bug fixed in
-      // cadical d_solver.remove_observed_var(toCadicalVar(var));
-      d_var_info[var].is_theory_atom = false;
+      //d_solver.remove_observed_var(toCadicalVar(var));
+      d_var_info[var].is_active = false;
+      std::cout << "inactive: " << var << std::endl;
     }
   }
 
@@ -476,8 +496,51 @@ class CadicalPropagator : public CaDiCaL::ExternalPropagator
   context::Context& d_context;
   CaDiCaL::Solver& d_solver;
 
+  /** Struct to store information on variables. */
+  struct VarInfo
+  {
+    bool is_theory_atom = false; // is variable a theory atom
+    bool is_observed = false;    // is variable observed in cadical
+    bool is_fixed = false;       // has variable fixed assignment
+    bool is_active = true;       // is variable active
+    int32_t assignment = 0;      // current variable assignment
+  };
+  /** Maps SatVariable to corresponding info struct. */
+  std::vector<VarInfo> d_var_info;
+
+  /**
+   * Currently active variables, can get inactive on user pops.
+   * Dependent on user context.
+   */
+  std::vector<SatVariable> d_active_vars;
+  /**
+   * Control stack to mananage d_active_vars on user pop.
+   *
+   * Note: We do not use a User-context-dependent CDList here, since we neeed
+   *       to know which variables are popped and thus become inactive.
+   */
+  std::vector<size_t> d_active_vars_control;
+
+  /**
+   * Variable assignment notifications.
+   *
+   * Used to unassign variables on backtrack.
+   */
   std::vector<SatLiteral> d_assignments;
+  /**
+   * Control stack to manage d_assignments when backtracking on SAT level.
+   *
+   * Note: We do not use a SAT-context-depenent CDList for d_assignments, since
+   *       we need to know which non-fixed variables are unassigned on
+   *       backtrack.
+   */
   std::vector<size_t> d_assignment_control;
+
+  /**
+   * Stores all observed decision variables.
+   *
+   * Note: May contain undefSatLiteral for unobserved decision variables.
+   */
   std::vector<SatLiteral> d_decisions;
 
   /** Used by cb_propagate() to return propagated literals. */
@@ -488,29 +551,12 @@ class CadicalPropagator : public CaDiCaL::ExternalPropagator
    * cb_add_reason_clause_lit().
    */
   std::vector<CadicalLit> d_new_clauses;
+  /**
+   * Used by add_new_var() to buffer added new variables, which will be added
+   * via add_new_vars() before sending new clauses to cadical.
+   */
   std::vector<CadicalVar> d_new_vars;
 
-  struct VarInfo
-  {
-    bool is_theory_atom = false;
-    bool is_observed = false;
-    bool is_fixed = false;
-    int32_t assignment = 0;
-  };
-  std::vector<VarInfo> d_var_info;
-
-  std::vector<SatVariable> d_active_vars;
-  std::vector<size_t> d_active_vars_control;
-
-  ///** User-context dependent set of active variables. */
-  // context::CDHashSet<SatVariable> d_active_vars;
-
-  /**
-   * Stores all fixed theory literals. Needed to re-enqueue theory literals
-   * when backtracking.
-   */
-  //std::vector<SatLiteral> d_fixed_literals;
-  // std::vector<size_t> d_fixed_literals_control;
   /**
    * Flag indicating whether cb_add_reason_clause_lit() is currently
    * processing a reason.
@@ -581,16 +627,28 @@ void CadicalSolver::setResourceLimit(ResourceManager* resmgr)
 
 SatValue CadicalSolver::_solve(const std::vector<SatLiteral>& assumptions)
 {
+  if (d_propagator)
+  {
+    Trace("cadical::propagator") << "solve start" << std::endl;
+  }
   TimerStat::CodeTimer codeTimer(d_statistics.d_solveTime);
   d_assumptions.clear();
   SatValue res;
   for (const SatLiteral& lit : assumptions)
   {
+    if (d_propagator)
+    {
+      Trace("cadical::propagator") << "assume: " << lit << std::endl;
+    }
     d_solver->assume(toCadicalLit(lit));
     d_assumptions.push_back(lit);
   }
   d_in_search = true;
   res = toSatValue(d_solver->solve());
+  if (d_propagator)
+  {
+    Trace("cadical::propagator") << "solve done: " << res << std::endl;
+  }
   d_in_search = false;
   ++d_statistics.d_numSatCalls;
   d_inSatMode = (res == SAT_VALUE_TRUE);
@@ -603,7 +661,7 @@ ClauseId CadicalSolver::addClause(SatClause& clause, bool removable)
 {
   if (d_propagator && TraceIsOn("cadical::propagator"))
   {
-    Trace("cadical::propagator") << "addClause:";
+    Trace("cadical::propagator") << "addClause (" << removable << "):";
     for (const SatLiteral& lit : clause)
     {
       Trace("cadical::propagator") << " " << lit;
