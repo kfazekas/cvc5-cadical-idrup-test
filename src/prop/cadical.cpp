@@ -69,10 +69,7 @@ class CadicalPropagator : public CaDiCaL::ExternalPropagator
   CadicalPropagator(prop::TheoryProxy* proxy,
                     context::Context* context,
                     CaDiCaL::Solver& solver)
-      : d_proxy(proxy),
-        d_context(*context),
-        d_solver(solver),
-        d_decisions(&d_propagator_ctx)
+      : d_proxy(proxy), d_context(*context), d_solver(solver)
   {
     d_var_info.emplace_back();  // 0: Not used
     d_var_info.emplace_back();  // 1: True
@@ -94,13 +91,13 @@ class CadicalPropagator : public CaDiCaL::ExternalPropagator
 
     Trace("cadical::propagator")
         << "notif::assignment: [" << (is_decision ? "d" : "p") << "] " << slit
-        << " (fixed: " << is_fixed << ", level: " << d_propagator_ctx.getLevel()
-        << ")" << std::endl;
+        << " (fixed: " << is_fixed << ", level: " << d_decisions.size() << ")"
+        << std::endl;
 
     // Save decision variables
     if (is_decision)
     {
-      d_decisions.push_back(slit);
+      d_decisions.back() = slit;
     }
 
     Assert(d_var_info[var].assignment == 0 || d_var_info[var].assignment == lit);
@@ -120,10 +117,10 @@ class CadicalPropagator : public CaDiCaL::ExternalPropagator
   {
     // d_fixed_literals_control.push_back(d_fixed_literals.size());
     d_context.push();
-    d_propagator_ctx.push();
     d_assignment_control.push_back(d_assignments.size());
-    Trace("cadical::propagator") << "notif::decision: new level "
-                                 << d_propagator_ctx.getLevel() << std::endl;
+    d_decisions.emplace_back();
+    Trace("cadical::propagator")
+        << "notif::decision: new level " << d_decisions.size() << std::endl;
   }
 
   /** Backtrack to given level. */
@@ -133,17 +130,17 @@ class CadicalPropagator : public CaDiCaL::ExternalPropagator
     Assert(d_proxy);
 
     // FIXME: cadical may notify us multiple times of backtracking.
-    if (d_propagator_ctx.getLevel() == level)
+    if (d_decisions.size() == level)
     {
       return;
     }
 
-    Assert(d_propagator_ctx.getLevel() > level);
-    for (size_t cur_level = d_propagator_ctx.getLevel(); cur_level > level;
-         --cur_level)
+    Assert(d_decisions.size() > level);
+    Assert(d_context.getLevel() > level);
+    for (size_t cur_level = d_decisions.size(); cur_level > level; --cur_level)
     {
       d_context.pop();
-      d_propagator_ctx.pop();
+      d_decisions.pop_back();
     }
 
     // Backtrack assignments, resend fixed theory literals that got backtracked
@@ -303,10 +300,7 @@ class CadicalPropagator : public CaDiCaL::ExternalPropagator
     return lit;
   }
 
-  const context::CDList<SatLiteral>& get_decisions() const
-  {
-    return d_decisions;
-  }
+  const std::vector<SatLiteral>& get_decisions() const { return d_decisions; }
 
   /** Get the current assignment of lit. */
   SatValue value(SatLiteral lit) const
@@ -470,20 +464,15 @@ class CadicalPropagator : public CaDiCaL::ExternalPropagator
 
   /** The associated theory proxy. */
   prop::TheoryProxy* d_proxy = nullptr;
+
   /** The SAT context. */
   context::Context& d_context;
   CaDiCaL::Solver& d_solver;
-  /**
-   * Propagator context used for CD datastructures that are only dependent by
-   * decision level or the SAT solver. Note that this is different from the
-   * d_context, which also includes the user context.
-   */
-  context::Context d_propagator_ctx;
-  context::CDList<SatLiteral> d_decisions;
-  /** Current non-fixed variable assignment. */
-  //context::CDHashMap<SatVariable, int32_t> d_assignments;
+
   std::vector<SatLiteral> d_assignments;
   std::vector<size_t> d_assignment_control;
+  std::vector<SatLiteral> d_decisions;
+
   /** Used by cb_propagate() to return propagated literals. */
   std::vector<SatLiteral> d_propagations;
 
@@ -757,9 +746,12 @@ bool CadicalSolver::isDecision(SatVariable var) const
 std::vector<SatLiteral> CadicalSolver::getDecisions() const
 {
   std::vector<SatLiteral> decisions;
-  for (const SatLiteral& lit : d_propagator->get_decisions())
+  for (SatLiteral lit : d_propagator->get_decisions())
   {
-    decisions.push_back(lit);
+    if (lit != 0)
+    {
+      decisions.push_back(lit);
+    }
   }
   return decisions;
 }
