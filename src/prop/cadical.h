@@ -90,6 +90,8 @@ class CadicalSolver : public CDCLTSatSolver, protected EnvObj
 
   std::shared_ptr<ProofNode> getProof() override;
 
+  SatProofManager* getProofManager() override;
+
  private:
   /**
    * Constructor.

@@ -82,10 +82,6 @@ class CadicalPropagator : public CaDiCaL::ExternalPropagator
     SatLiteral slit = toSatLiteral(lit);
     SatVariable var = slit.getSatVariable();
     Assert(var < d_var_info.size());
-    if (!d_var_info[var].is_theory_atom)
-    {
-      return;
-    }
 
     bool is_decision = d_solver.is_decision(lit);
 
@@ -109,7 +105,10 @@ class CadicalPropagator : public CaDiCaL::ExternalPropagator
     d_var_info[var].assignment = lit;
     d_assignments.push_back(slit);
 
-    d_proxy->enqueueTheoryLiteral(slit);
+    if (d_var_info[var].is_theory_atom)
+    {
+      d_proxy->enqueueTheoryLiteral(slit);
+    }
   }
 
   /** Push new decision level. */
@@ -227,9 +226,17 @@ class CadicalPropagator : public CaDiCaL::ExternalPropagator
 
   int cb_decide() override
   {
-    // bool stop;
-    // return toCadicalLit(d_proxy->getNextDecisionEngineRequest(stop));
-    //  TODO: stopping the search should be handled via the terminator
+    SatLiteral lit = d_proxy->getNextTheoryDecisionRequest();
+    Trace("cadical::propagator") << "cb::decide: " << lit << std::endl;
+    if (lit != undefSatLiteral)
+    {
+      SatVariable var = lit.getSatVariable();
+      if (!d_var_info[var].is_observed)
+      {
+        d_solver.add_observed_var(toCadicalVar(var));
+      }
+      return toCadicalLit(lit);
+    }
     return 0;
   }
 
@@ -761,6 +768,12 @@ std::vector<Node> CadicalSolver::getOrderHeap() const { return {}; }
 int32_t CadicalSolver::getIntroLevel(SatVariable v) const { return -1; }
 
 std::shared_ptr<ProofNode> CadicalSolver::getProof()
+{
+  // TODO
+  return nullptr;
+}
+
+SatProofManager* CadicalSolver::getProofManager()
 {
   // TODO
   return nullptr;
