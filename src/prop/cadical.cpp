@@ -140,7 +140,6 @@ class CadicalPropagator : public CaDiCaL::ExternalPropagator
   void notify_backtrack(size_t level) override
   {
     Trace("cadical::propagator") << "notif::backtrack: " << level << std::endl;
-    Assert(d_proxy);
 
     // FIXME: cadical may notify us multiple times of backtracking.
     if (d_decisions.size() == level)
@@ -431,7 +430,7 @@ class CadicalPropagator : public CaDiCaL::ExternalPropagator
       // FIXME: Do not remove observed variables for now until bug fixed in
       //d_solver.remove_observed_var(toCadicalVar(var));
       d_var_info[var].is_active = false;
-      std::cout << "inactive: " << var << std::endl;
+      Trace("cadical::propagator") << "set inactive: " << var << std::endl;
     }
   }
 
@@ -795,7 +794,11 @@ void CadicalSolver::pop()
   d_propagator->user_pop();
 }
 
-void CadicalSolver::resetTrail() {}
+void CadicalSolver::resetTrail()
+{
+  // Reset SAT context to decision level 0
+  d_propagator->notify_backtrack(0);
+}
 
 void CadicalSolver::requirePhase(SatLiteral lit)
 {
