@@ -418,8 +418,7 @@ class CadicalPropagator : public CaDiCaL::ExternalPropagator
     {
       SatVariable var = d_active_vars.back();
       d_active_vars.pop_back();
-      // FIXME: Do not remove observed variables for now until bug fixed in
-      //d_solver.remove_observed_var(toCadicalVar(var));
+      d_solver.remove_observed_var(toCadicalVar(var));
       d_var_info[var].is_active = false;
       Trace("cadical::propagator") << "set inactive: " << var << std::endl;
     }
