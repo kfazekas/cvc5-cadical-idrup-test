@@ -141,9 +141,11 @@ class CadicalPropagator : public CaDiCaL::ExternalPropagator
   {
     Trace("cadical::propagator") << "notif::backtrack: " << level << std::endl;
 
-    // FIXME: cadical may notify us multiple times of backtracking.
-    if (d_decisions.size() == level)
+    // CaDiCaL may notify us about backtracks of decisions that we were not
+    // notified about. We can safely ignore them.
+    if (d_decisions.size() <= level)
     {
+      Assert(d_decisions.size() == 0);
       return;
     }
 
