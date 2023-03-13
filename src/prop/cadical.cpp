@@ -210,6 +210,8 @@ class CadicalPropagator : public CaDiCaL::ExternalPropagator
 
     do
     {
+      Trace("cadical::propagator")
+          << "full check (recheck: " << recheck << ")" << std::endl;
       d_proxy->theoryCheck(theory::Theory::Effort::EFFORT_FULL);
       theory_propagate();
       for (const SatLiteral& p : d_propagations)
@@ -244,11 +246,6 @@ class CadicalPropagator : public CaDiCaL::ExternalPropagator
     SatLiteral lit = d_proxy->getNextTheoryDecisionRequest();
     if (lit != undefSatLiteral)
     {
-      SatVariable var = lit.getSatVariable();
-      if (!d_var_info[var].is_observed)
-      {
-        d_solver.add_observed_var(toCadicalVar(var));
-      }
       Trace("cadical::propagator") << "cb::decide: " << lit << std::endl;
       return toCadicalLit(lit);
     }
@@ -309,7 +306,6 @@ class CadicalPropagator : public CaDiCaL::ExternalPropagator
   /** Add next clause literal to the SAT solver. */
   int cb_add_external_clause_lit() override
   {
-    add_new_vars();
     Assert(!d_new_clauses.empty());
     CadicalLit lit = d_new_clauses.front();
     d_new_clauses.erase(d_new_clauses.begin());
@@ -374,24 +370,17 @@ class CadicalPropagator : public CaDiCaL::ExternalPropagator
   void add_new_var(const SatVariable& var, bool is_theory_atom, bool in_search)
   {
     Assert(d_var_info.size() == var);
-    bool is_observed = !in_search;
 
     // Boolean variables are not theory atoms, but may still occur in
     // lemmas/conflicts sent to the SAT solver. Hence, we have to observe them
     // since CaDiCaL expects all literals sent back to be observed.
-    if (in_search)
-    {
-      d_new_vars.push_back(var);
-    }
-    else
-    {
-      d_solver.add_observed_var(toCadicalVar(var));
-    }
+    d_solver.add_observed_var(toCadicalVar(var));
     d_active_vars.push_back(var);
     Trace("cadical::propagator")
         << "new var: " << var << " (theoryAtom: " << is_theory_atom
         << ", inSearch: " << in_search << ")" << std::endl;
-    d_var_info.push_back({is_theory_atom, is_observed});
+    auto& info = d_var_info.emplace_back();
+    info.is_theory_atom = is_theory_atom;
   }
 
   /**
@@ -445,20 +434,8 @@ class CadicalPropagator : public CaDiCaL::ExternalPropagator
 
     for (const auto& lit : propagated_lits)
     {
-      SatVariable var = lit.getSatVariable();
       Trace("cadical::propagator") << "new propagation: " << lit << std::endl;
-      if (!d_var_info[var].is_observed)
-      {
-        Trace("cadical::propagator")
-            << "add propagation reason for unobserved: " << lit << std::endl;
-        SatClause clause;
-        d_proxy->explainPropagation(lit, clause);
-        add_clause(clause);
-      }
-      else
-      {
-        d_propagations.push_back(lit);
-      }
+      d_propagations.push_back(lit);
     }
   }
 
@@ -475,19 +452,6 @@ class CadicalPropagator : public CaDiCaL::ExternalPropagator
     return toCadicalLit(next);
   }
 
-  void add_new_vars()
-  {
-    for (size_t i = 0; i < d_new_vars.size(); ++i)
-    {
-      SatVariable var = d_new_vars[i];
-      Assert(d_var_info[var].is_observed == false);
-      Trace("cadical::propagator") << "register var: " << var << std::endl;
-      d_solver.add_observed_var(toCadicalVar(var));
-      d_var_info[var].is_observed = true;
-    }
-    d_new_vars.clear();
-  }
-
   /** The associated theory proxy. */
   prop::TheoryProxy* d_proxy = nullptr;
 
@@ -498,8 +462,7 @@ class CadicalPropagator : public CaDiCaL::ExternalPropagator
   /** Struct to store information on variables. */
   struct VarInfo
   {
-    bool is_theory_atom = false; // is variable a theory atom
-    bool is_observed = false;    // is variable observed in cadical
+    bool is_theory_atom = false;  // is variable a theory atom
     bool is_fixed = false;       // has variable fixed assignment
     bool is_active = true;       // is variable active
     int32_t assignment = 0;      // current variable assignment
@@ -550,11 +513,6 @@ class CadicalPropagator : public CaDiCaL::ExternalPropagator
    * cb_add_reason_clause_lit().
    */
   std::vector<CadicalLit> d_new_clauses;
-  /**
-   * Used by add_new_var() to buffer added new variables, which will be added
-   * via add_new_vars() before sending new clauses to cadical.
-   */
-  std::vector<CadicalVar> d_new_vars;
 
   /**
    * Flag indicating whether cb_add_reason_clause_lit() is currently
