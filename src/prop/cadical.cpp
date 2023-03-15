@@ -72,8 +72,6 @@ class CadicalPropagator : public CaDiCaL::ExternalPropagator
       : d_proxy(proxy), d_context(*context), d_solver(solver)
   {
     d_var_info.emplace_back();  // 0: Not used
-    d_var_info.emplace_back();  // 1: True
-    d_var_info.emplace_back();  // 2: False
   }
 
   /** Store current assignment, notify theories of assigned theory literals. */
@@ -740,9 +738,8 @@ void CadicalSolver::initialize(context::Context* context,
   d_proxy = theoryProxy;
   d_propagator.reset(new CadicalPropagator(theoryProxy, context, *d_solver));
   d_solver->connect_external_propagator(d_propagator.get());
-  // Add d_true/d_false, which were added in init() and may occur in lemmas.
-  d_solver->add_observed_var(1);
-  d_solver->add_observed_var(2);
+
+  init();
 }
 
 void CadicalSolver::push()

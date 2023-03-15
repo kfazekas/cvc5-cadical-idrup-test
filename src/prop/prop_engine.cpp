@@ -84,7 +84,7 @@ PropEngine::PropEngine(Env& env, TheoryEngine* te)
   ProofNodeManager* pnm = d_env.getProofNodeManager();
 
 #if 1
-  d_satSolver = SatSolverFactory::createCadical(
+  d_satSolver = SatSolverFactory::createCadicalCDCLT(
       d_env, statisticsRegistry(), env.getResourceManager());
 #else
   d_satSolver =
