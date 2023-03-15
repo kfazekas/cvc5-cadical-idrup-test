@@ -77,6 +77,11 @@ class CadicalPropagator : public CaDiCaL::ExternalPropagator
   /** Store current assignment, notify theories of assigned theory literals. */
   void notify_assignment(int lit, bool is_fixed) override
   {
+    if (d_found_solution)
+    {
+      return;
+    }
+
     SatLiteral slit = toSatLiteral(lit);
     SatVariable var = slit.getSatVariable();
     Assert(var < d_var_info.size());
@@ -208,6 +213,11 @@ class CadicalPropagator : public CaDiCaL::ExternalPropagator
     Trace("cadical::propagator") << "cb::check_found_model" << std::endl;
     bool recheck = false;
 
+    if (d_found_solution)
+    {
+      return true;
+    }
+
     do
     {
       Trace("cadical::propagator")
@@ -243,6 +253,10 @@ class CadicalPropagator : public CaDiCaL::ExternalPropagator
 
   int cb_decide() override
   {
+    if (d_found_solution)
+    {
+      return 0;
+    }
     SatLiteral lit = d_proxy->getNextTheoryDecisionRequest();
     if (lit != undefSatLiteral)
     {
@@ -253,6 +267,17 @@ class CadicalPropagator : public CaDiCaL::ExternalPropagator
     {
       bool stopSearch = false;
       lit = d_proxy->getNextDecisionEngineRequest(stopSearch);
+      // We found a partial model, let's check it.
+      if (stopSearch)
+      {
+        d_found_solution = cb_check_found_model({});
+        if (d_found_solution)
+        {
+          // TODO: Maybe set is_lazy to true, to deactivate callbacks except
+          //       cb_check_found_model()?
+          Trace("cadical::propagator") << "Found solution" << std::endl;
+        }
+      }
       if (!stopSearch && lit != undefSatLiteral)
       {
         Trace("cadical::propagator") << "cb::decide: " << lit << std::endl;
@@ -269,6 +294,10 @@ class CadicalPropagator : public CaDiCaL::ExternalPropagator
    */
   int cb_propagate() override
   {
+    if (d_found_solution)
+    {
+      return 0;
+    }
     Trace("cadical::propagator") << "cb::propagate" << std::endl;
     if (d_propagations.empty())
     {
@@ -400,8 +429,8 @@ class CadicalPropagator : public CaDiCaL::ExternalPropagator
    */
   bool done() const
   {
-    bool res = !d_proxy->theoryNeedCheck()  //&& d_propagations.empty()
-               && d_new_clauses.empty();
+    bool res = (!d_proxy->theoryNeedCheck() && d_new_clauses.empty())
+               || d_found_solution;
     Trace("cadical::propagator") << "done: " << res << std::endl;
     return res;
   }
@@ -431,6 +460,7 @@ class CadicalPropagator : public CaDiCaL::ExternalPropagator
       d_var_info[var].is_active = false;
       Trace("cadical::propagator") << "set inactive: " << var << std::endl;
     }
+    d_found_solution = false;
   }
 
   bool is_fixed(SatVariable var) const { return d_var_info[var].is_fixed; }
@@ -533,6 +563,8 @@ class CadicalPropagator : public CaDiCaL::ExternalPropagator
   bool d_processing_reason = false;
   /** Reason storage to process current reason in cb_add_reason_clause_lit(). */
   std::vector<SatLiteral> d_reason;
+
+  bool d_found_solution = false;
 };
 
 CadicalSolver::CadicalSolver(Env& env,
