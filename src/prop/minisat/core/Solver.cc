@@ -1663,7 +1663,6 @@ lbool Solver::search(int nof_conflicts)
       }
 
       // Increase decision level and enqueue 'next'
-      std::cout << "new decision level" << std::endl;
       newDecisionLevel();
       uncheckedEnqueue(next);
     }
