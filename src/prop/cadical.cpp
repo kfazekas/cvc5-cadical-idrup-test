@@ -424,6 +424,8 @@ class CadicalPropagator : public CaDiCaL::ExternalPropagator
     }
   }
 
+  bool is_fixed(SatVariable var) const { return d_var_info[var].is_fixed; }
+
  private:
   /** Retrieve theory propagations and add them to the propagations list. */
   void theory_propagate()
@@ -771,6 +773,15 @@ bool CadicalSolver::isDecision(SatVariable var) const
   return d_solver->is_decision(toCadicalVar(var));
 }
 
+bool CadicalSolver::isFixed(SatVariable var) const
+{
+  if (d_propagator)
+  {
+    return d_propagator->is_fixed(var);
+  }
+  return d_solver->fixed(toCadicalVar(var));
+}
+
 std::vector<SatLiteral> CadicalSolver::getDecisions() const
 {
   std::vector<SatLiteral> decisions;
@@ -785,8 +796,6 @@ std::vector<SatLiteral> CadicalSolver::getDecisions() const
 }
 
 std::vector<Node> CadicalSolver::getOrderHeap() const { return {}; }
-
-int32_t CadicalSolver::getIntroLevel(SatVariable v) const { return -1; }
 
 std::shared_ptr<ProofNode> CadicalSolver::getProof()
 {
