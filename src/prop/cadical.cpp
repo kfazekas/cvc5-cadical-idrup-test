@@ -253,9 +253,9 @@ class CadicalPropagator : public CaDiCaL::ExternalPropagator
     }
     else
     {
-      bool stop; // TODO: stop search via terminator
-      lit = d_proxy->getNextDecisionEngineRequest(stop);
-      if (lit != undefSatLiteral)
+      bool stopSearch = false;
+      lit = d_proxy->getNextDecisionEngineRequest(stopSearch);
+      if (!stopSearch && lit != undefSatLiteral)
       {
         Trace("cadical::propagator") << "cb::decide: " << lit << std::endl;
         return toCadicalLit(lit);
