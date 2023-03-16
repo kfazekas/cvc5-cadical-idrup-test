@@ -151,6 +151,7 @@ class CadicalPropagator : public CaDiCaL::ExternalPropagator
       Assert(d_decisions.size() == 0);
       return;
     }
+    d_found_solution = false;
 
     Assert(d_decisions.size() > level);
     Assert(d_context.getLevel() > level);
@@ -273,9 +274,19 @@ class CadicalPropagator : public CaDiCaL::ExternalPropagator
         d_found_solution = cb_check_found_model({});
         if (d_found_solution)
         {
-          // TODO: Maybe set is_lazy to true, to deactivate callbacks except
-          //       cb_check_found_model()?
           Trace("cadical::propagator") << "Found solution" << std::endl;
+          d_found_solution = d_proxy->isDecisionEngineDone();
+          if (!d_found_solution)
+          {
+            Trace("cadical::propagator")
+                << "Decision engine not done" << std::endl;
+            stopSearch = false;
+            lit = d_proxy->getNextDecisionEngineRequest(stopSearch);
+          }
+        }
+        else
+        {
+          Trace("cadical::propagator") << "No solution found yet" << std::endl;
         }
       }
       if (!stopSearch && lit != undefSatLiteral)
@@ -429,10 +440,28 @@ class CadicalPropagator : public CaDiCaL::ExternalPropagator
    */
   bool done() const
   {
-    bool res = (!d_proxy->theoryNeedCheck() && d_new_clauses.empty())
-               || d_found_solution;
-    Trace("cadical::propagator") << "done: " << res << std::endl;
-    return res;
+    if (!d_new_clauses.empty())
+    {
+      Trace("cadical::propagator") << "not done: pending clauses" << std::endl;
+      return false;
+    }
+    if (d_proxy->theoryNeedCheck())
+    {
+      Trace("cadical::propagator")
+          << "not done: theory need check" << std::endl;
+      return false;
+    }
+    if (d_found_solution)
+    {
+      Trace("cadical::propagator")
+          << "done: found partial solution" << std::endl;
+    }
+    else
+    {
+      Trace("cadical::propagator")
+          << "done: full assignment consistent" << std::endl;
+    }
+    return true;
   }
 
   void user_push()
@@ -456,11 +485,10 @@ class CadicalPropagator : public CaDiCaL::ExternalPropagator
     {
       SatVariable var = d_active_vars.back();
       d_active_vars.pop_back();
-      d_solver.remove_observed_var(toCadicalVar(var));
+      // d_solver.remove_observed_var(toCadicalVar(var));
       d_var_info[var].is_active = false;
       Trace("cadical::propagator") << "set inactive: " << var << std::endl;
     }
-    d_found_solution = false;
   }
 
   bool is_fixed(SatVariable var) const { return d_var_info[var].is_fixed; }
