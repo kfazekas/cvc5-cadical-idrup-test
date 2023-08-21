@@ -47,8 +47,8 @@ if(NOT CaDiCaL_FOUND_SYSTEM)
   include(CheckSymbolExists)
   include(ExternalProject)
 
-  set(CaDiCaL_VERSION "c9369988677fb8803847050bf801933dbe2a538e")
-  set(CaDiCaL_CHECKSUM "8bc2c3bdf4ef3780f001b31c2fe02168f3bb34b8")
+  set(CaDiCaL_VERSION "rel-1.6.0")
+  set(CaDiCaL_CHECKSUM "e354860b90244a0dd9349fa9b725703c504009ab")
 
   # avoid configure script and instantiate the makefile manually the configure
   # scripts unnecessarily fails for cross compilation thus we do the bare
@@ -82,8 +82,8 @@ if(NOT CaDiCaL_FOUND_SYSTEM)
     CaDiCaL-EP
     ${COMMON_EP_CONFIG}
     BUILD_IN_SOURCE ON
-    GIT_REPOSITORY git@gitlab.tf.uni-freiburg.de:biere/cadical-internal.git
-    GIT_TAG origin/theory-propagation
+    URL https://github.com/arminbiere/cadical/archive/${CaDiCaL_VERSION}.tar.gz
+    URL_HASH SHA1=${CaDiCaL_CHECKSUM}
     CONFIGURE_COMMAND mkdir -p <SOURCE_DIR>/build
     # avoid configure script, prepare the makefile manually
     COMMAND ${CMAKE_COMMAND} -E copy <SOURCE_DIR>/makefile.in
