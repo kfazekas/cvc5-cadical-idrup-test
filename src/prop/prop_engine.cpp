@@ -27,6 +27,7 @@
 #include "options/main_options.h"
 #include "options/options.h"
 #include "options/proof_options.h"
+#include "options/prop_options.h"
 #include "options/smt_options.h"
 #include "proof/proof_node_algorithm.h"
 #include "prop/cnf_stream.h"
@@ -83,8 +84,8 @@ PropEngine::PropEngine(Env& env, TheoryEngine* te)
   context::UserContext* userContext = d_env.getUserContext();
   ProofNodeManager* pnm = d_env.getProofNodeManager();
 
-#if 1
-  if (d_env.isSatProofProducing())
+  if (options().prop.satSolver == options::SatSolverMode::MINISAT
+      || d_env.isSatProofProducing())
   {
     d_satSolver =
         SatSolverFactory::createCDCLTMinisat(d_env, statisticsRegistry());
@@ -94,10 +95,6 @@ PropEngine::PropEngine(Env& env, TheoryEngine* te)
     d_satSolver = SatSolverFactory::createCadicalCDCLT(
         d_env, statisticsRegistry(), env.getResourceManager());
   }
-#else
-  d_satSolver =
-      SatSolverFactory::createCDCLTMinisat(d_env, statisticsRegistry());
-#endif
 
   // CNF stream and theory proxy required pointers to each other, make the
   // theory proxy first
