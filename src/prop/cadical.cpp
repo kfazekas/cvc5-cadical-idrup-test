@@ -830,7 +830,7 @@ void CadicalSolver::resetTrail()
   d_propagator->notify_backtrack(0);
 }
 
-void CadicalSolver::requirePhase(SatLiteral lit)
+void CadicalSolver::preferPhase(SatLiteral lit)
 {
   Trace("cadical::propagator") << "phase: " << lit << std::endl;
   d_solver->phase(toCadicalLit(lit));

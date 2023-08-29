@@ -78,7 +78,7 @@ class CadicalSolver : public CDCLTSatSolver, protected EnvObj
 
   void resetTrail() override;
 
-  void requirePhase(SatLiteral lit) override;
+  void preferPhase(SatLiteral lit) override;
 
   bool isDecision(SatVariable var) const override;
 
