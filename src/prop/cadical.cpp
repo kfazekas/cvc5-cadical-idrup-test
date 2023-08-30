@@ -284,6 +284,15 @@ class CadicalPropagator : public CaDiCaL::ExternalPropagator
     }
     if (!stopSearch && lit != undefSatLiteral)
     {
+      int8_t phase = d_var_info[lit.getSatVariable()].phase;
+      if (phase != 0)
+      {
+        if ((phase == -1 && !lit.isNegated())
+            || (phase == 1 && lit.isNegated()))
+        {
+          lit = ~lit;
+        }
+      }
       Trace("cadical::propagator") << "cb::decide: " << lit << std::endl;
       return toCadicalLit(lit);
     }
@@ -485,6 +494,14 @@ class CadicalPropagator : public CaDiCaL::ExternalPropagator
 
   bool is_fixed(SatVariable var) const { return d_var_info[var].is_fixed; }
 
+  /**
+   * Record preferred phase of variable.
+   * @param var The variable.
+   * @param phase The phase, -1 if negative, 1 if positive, 0 if no phase
+   *              is configured.
+   */
+  void phase(SatVariable var, uint8_t phase) { d_var_info[var].phase = phase; }
+
  private:
   /** Retrieve theory propagations and add them to the propagations list. */
   void theory_propagate()
@@ -528,6 +545,7 @@ class CadicalPropagator : public CaDiCaL::ExternalPropagator
     bool is_fixed = false;       // has variable fixed assignment
     bool is_active = true;       // is variable active
     int32_t assignment = 0;      // current variable assignment
+    int8_t phase = 0;            // preferred phase
   };
   /** Maps SatVariable to corresponding info struct. */
   std::vector<VarInfo> d_var_info;
@@ -826,6 +844,7 @@ void CadicalSolver::preferPhase(SatLiteral lit)
 {
   Trace("cadical::propagator") << "phase: " << lit << std::endl;
   d_solver->phase(toCadicalLit(lit));
+  d_propagator->phase(lit.getSatVariable(), lit.isNegated() ? -1 : 1);
 }
 
 bool CadicalSolver::isDecision(SatVariable var) const
