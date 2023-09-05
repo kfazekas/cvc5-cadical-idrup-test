@@ -55,6 +55,7 @@ TheoryProxy::TheoryProxy(Env& env,
       d_zll(nullptr),
       d_prr(nullptr),
       d_stopSearch(userContext(), false),
+      d_decisionExhausted(context(), false),
       d_activatedSkDefs(false)
 {
   bool trackZeroLevel =
@@ -233,6 +234,24 @@ void TheoryProxy::theoryCheck(theory::Theory::Effort effort) {
   }
   if (!d_stopSearch.get())
   {
+    if (effort == theory::Theory::EFFORT_FULL)
+    {
+      if (!d_decisionExhausted)
+      {
+        // Some modules, e.g., finite model finding, require that theory
+        // decisions have been requested exhaustively at least once. It can
+        // only happen that this is false at full effort if the SAT solver
+        // determines sat without making a decision. We discard the decision
+        // request, the only thing required is that it is added to the SAT
+        // solver via Valuation::ensureLiteral() (via getNextDecisionRequest()).
+        bool requirePhase, stopSearch;
+        SatLiteral l = getNextDecisionRequest(requirePhase, stopSearch);
+        if (l != undefSatLiteral)
+        {
+          return;
+        }
+      }
+    }
     d_theoryEngine->check(effort);
   }
 }
@@ -317,6 +336,7 @@ SatLiteral TheoryProxy::getNextDecisionRequest(bool& requirePhase,
   TNode n = d_theoryEngine->getNextDecisionRequest();
   if (!n.isNull())
   {
+    Trace("theory-proxy") << "... return next theory decision" << std::endl;
     requirePhase = true;
     res = d_cnfStream->getLiteral(n);
   }
@@ -343,19 +363,23 @@ SatLiteral TheoryProxy::getNextDecisionRequest(bool& requirePhase,
         Trace("theory-proxy") << "...returned next decision" << std::endl;
       }
     }
+    if (res == undefSatLiteral)
+    {
+      d_decisionExhausted = true;
+    }
   }
   return res;
 }
 
-bool TheoryProxy::theoryNeedCheck() const {
+bool TheoryProxy::theoryNeedCheck() const
+{
   if (d_stopSearch.get())
   {
     return false;
   }
-  else if (d_activatedSkDefs)
+  else if (d_activatedSkDefs || !d_decisionExhausted.get())
   {
-    // a new skolem definition become active on the last call to theoryCheck,
-    // return true
+    // a new skolem definition became active on the last call to theoryCheck
     return true;
   }
   // otherwise ask the theory engine, which will return true if its output
@@ -404,8 +428,12 @@ void TheoryProxy::spendResource(Resource r)
   d_theoryEngine->spendResource(r);
 }
 
-bool TheoryProxy::isDecisionEngineDone() {
-  return d_decisionEngine->isDone() || d_stopSearch.get();
+bool TheoryProxy::isDecisionRelevant(SatVariable var) { return true; }
+
+bool TheoryProxy::isDecisionEngineDone()
+{
+  return (d_decisionEngine->isDone() && d_decisionExhausted.get())
+         || d_stopSearch.get();
 }
 
 CnfStream* TheoryProxy::getCnfStream() const { return d_cnfStream; }

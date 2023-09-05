@@ -258,6 +258,12 @@ class TheoryProxy : protected EnvObj, public Registrar
   context::CDO<bool> d_stopSearch;
 
   /**
+   * True if theory decisions have been requested until exhaustion at least
+   * once.
+   */
+  context::CDO<bool> d_decisionExhausted;
+
+  /**
    * Whether we activated new skolem definitions on the last call to
    * theoryCheck. If this is true, then theoryNeedCheck must return true,
    * since there are new formulas to satisfy. Note that skolem definitions
