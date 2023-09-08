@@ -219,6 +219,10 @@ class CadicalPropagator : public CaDiCaL::ExternalPropagator
       return true;
     }
 
+    // Check full model. Theory engine may trigger a recheck, unless new
+    // variables were added during check. If so, we break out of the check and
+    // have the SAT solver extend the model with the new variables.
+    size_t size = d_var_info.size();
     do
     {
       Trace("cadical::propagator")
@@ -244,7 +248,7 @@ class CadicalPropagator : public CaDiCaL::ExternalPropagator
       {
         recheck = d_proxy->theoryNeedCheck();
       }
-    } while (recheck);
+    } while (d_var_info.size() == size && recheck);
 
     bool res = done();
     Trace("cadical::propagator")
