@@ -494,6 +494,13 @@ class CadicalPropagator : public CaDiCaL::ExternalPropagator
       d_var_info[var].is_active = false;
       Trace("cadical::propagator") << "set inactive: " << var << std::endl;
     }
+
+    // Re-enqueue fixed theory literals on level 0
+    for (SatLiteral lit : d_assignments)
+    {
+      Trace("cadical::propagator") << "re-enqueue: " << lit << std::endl;
+      d_proxy->enqueueTheoryLiteral(lit);
+    }
   }
 
   bool is_fixed(SatVariable var) const { return d_var_info[var].is_fixed; }
@@ -836,6 +843,8 @@ void CadicalSolver::pop()
   --d_assertionLevel;
   d_context->pop();  // SAT context for cvc5
   d_propagator->user_pop();
+  // CaDiCaL issues notify_backtrack(0) when done, we don't have to call this
+  // explicitly here
 }
 
 void CadicalSolver::resetTrail()
