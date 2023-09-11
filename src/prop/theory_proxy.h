@@ -167,6 +167,9 @@ class TheoryProxy : protected EnvObj, public Registrar
 
   bool isDecisionEngineDone();
 
+  /** Determine if theory decisions have been requested until exhaustion. */
+  bool isTheoryDecisionExhausted() const;
+
   /**
    * Get the associated CNF stream.
    * @return The CNF stream.
@@ -261,7 +264,7 @@ class TheoryProxy : protected EnvObj, public Registrar
    * True if theory decisions have been requested until exhaustion at least
    * once.
    */
-  context::CDO<bool> d_decisionExhausted;
+  context::CDO<bool> d_theoryDecisionExhausted;
 
   /**
    * Whether we activated new skolem definitions on the last call to

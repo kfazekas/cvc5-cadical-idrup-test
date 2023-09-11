@@ -55,7 +55,7 @@ TheoryProxy::TheoryProxy(Env& env,
       d_zll(nullptr),
       d_prr(nullptr),
       d_stopSearch(userContext(), false),
-      d_decisionExhausted(context(), false),
+      d_theoryDecisionExhausted(context(), false),
       d_activatedSkDefs(false)
 {
   bool trackZeroLevel =
@@ -234,24 +234,6 @@ void TheoryProxy::theoryCheck(theory::Theory::Effort effort) {
   }
   if (!d_stopSearch.get())
   {
-    if (effort == theory::Theory::EFFORT_FULL)
-    {
-      if (!d_decisionExhausted)
-      {
-        // Some modules, e.g., finite model finding, require that theory
-        // decisions have been requested exhaustively at least once. It can
-        // only happen that this is false at full effort if the SAT solver
-        // determines sat without making a decision. We discard the decision
-        // request, the only thing required is that it is added to the SAT
-        // solver via Valuation::ensureLiteral() (via getNextDecisionRequest()).
-        bool requirePhase, stopSearch;
-        SatLiteral l = getNextDecisionRequest(requirePhase, stopSearch);
-        if (l != undefSatLiteral)
-        {
-          return;
-        }
-      }
-    }
     d_theoryEngine->check(effort);
   }
 }
@@ -365,7 +347,7 @@ SatLiteral TheoryProxy::getNextDecisionRequest(bool& requirePhase,
     }
     if (res == undefSatLiteral)
     {
-      d_decisionExhausted = true;
+      d_theoryDecisionExhausted = true;
     }
   }
   return res;
@@ -377,7 +359,7 @@ bool TheoryProxy::theoryNeedCheck() const
   {
     return false;
   }
-  else if (d_activatedSkDefs || !d_decisionExhausted.get())
+  else if (d_activatedSkDefs || !d_theoryDecisionExhausted.get())
   {
     // a new skolem definition became active on the last call to theoryCheck
     return true;
@@ -428,12 +410,15 @@ void TheoryProxy::spendResource(Resource r)
   d_theoryEngine->spendResource(r);
 }
 
-bool TheoryProxy::isDecisionRelevant(SatVariable var) { return true; }
-
 bool TheoryProxy::isDecisionEngineDone()
 {
-  return (d_decisionEngine->isDone() && d_decisionExhausted.get())
+  return (d_decisionEngine->isDone() && d_theoryDecisionExhausted.get())
          || d_stopSearch.get();
+}
+
+bool TheoryProxy::isTheoryDecisionExhausted() const
+{
+  return d_theoryDecisionExhausted.get();
 }
 
 CnfStream* TheoryProxy::getCnfStream() const { return d_cnfStream; }
