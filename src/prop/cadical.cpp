@@ -499,22 +499,25 @@ class CadicalPropagator : public CaDiCaL::ExternalPropagator
 
   void user_push()
   {
+    Trace("cadical::propagator")
+        << "user push: " << d_active_vars_control.size();
     d_active_vars_control.push_back(d_active_vars.size());
     Trace("cadical::propagator")
-        << "user push: " << d_active_vars_control.size() << std::endl;
+        << " -> " << d_active_vars_control.size() << std::endl;
   }
 
   /**
    * Pop user assertion level.
-   * @param level The current assertion level (pre pop). We need this to keep
-   *              track of which fixed literal to re-enqueue.
    */
-  void user_pop(uint32_t level)
+  void user_pop()
   {
+    uint32_t level = d_active_vars_control.size();
     Trace("cadical::propagator")
-        << "user pop: " << d_active_vars_control.size() << std::endl;
+        << "user pop: " << d_active_vars_control.size();
     size_t pop_to = d_active_vars_control.back();
     d_active_vars_control.pop_back();
+    Trace("cadical::propagator")
+        << " -> " << d_active_vars_control.size() << std::endl;
 
     // Unregister popped variables so that CaDiCaL does not notify us anymore
     // about assignments.
@@ -879,7 +882,7 @@ void CadicalSolver::pop()
   //}
 
   d_context->pop();  // SAT context for cvc5
-  d_propagator->user_pop(d_assertionLevel);
+  d_propagator->user_pop();
   --d_assertionLevel;
   // CaDiCaL issues notify_backtrack(0) when done, we don't have to call this
   // explicitly here
