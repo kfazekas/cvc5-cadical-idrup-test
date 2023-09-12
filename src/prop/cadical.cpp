@@ -227,14 +227,11 @@ class CadicalPropagator : public CaDiCaL::ExternalPropagator
     // on this. If new variables are added, we interrupt the check to force
     // the SAT solver to extend the model with the new variables.
     size_t size = d_var_info.size();
-    if (!d_proxy->isTheoryDecisionExhausted())
+    bool requirePhase, stopSearch;
+    d_proxy->getNextDecisionRequest(requirePhase, stopSearch, true);
+    if (d_var_info.size() != size)
     {
-      bool requirePhase, stopSearch;
-      d_proxy->getNextDecisionRequest(requirePhase, stopSearch);
-      if (d_var_info.size() != size)
-      {
-        return false;
-      }
+      return false;
     }
     // Theory engine may trigger a recheck, unless new variables were added
     // during check. If so, we break out of the check and have the SAT solver

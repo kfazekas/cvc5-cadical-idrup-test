@@ -55,7 +55,6 @@ TheoryProxy::TheoryProxy(Env& env,
       d_zll(nullptr),
       d_prr(nullptr),
       d_stopSearch(userContext(), false),
-      d_theoryDecisionExhausted(context(), false),
       d_activatedSkDefs(false)
 {
   bool trackZeroLevel =
@@ -309,7 +308,8 @@ void TheoryProxy::enqueueTheoryLiteral(const SatLiteral& l) {
 }
 
 SatLiteral TheoryProxy::getNextDecisionRequest(bool& requirePhase,
-                                               bool& stopSearch)
+                                               bool& stopSearch,
+                                               bool theoryOnly)
 {
   Trace("theory-proxy") << "TheoryProxy: getNextDecisionRequest" << std::endl;
   requirePhase = false;
@@ -322,7 +322,7 @@ SatLiteral TheoryProxy::getNextDecisionRequest(bool& requirePhase,
     requirePhase = true;
     res = d_cnfStream->getLiteral(n);
   }
-  else
+  else if (!theoryOnly)
   {
     Assert(d_decisionEngine != nullptr);
     Assert(stopSearch != true);
@@ -345,10 +345,6 @@ SatLiteral TheoryProxy::getNextDecisionRequest(bool& requirePhase,
         Trace("theory-proxy") << "...return next decision" << std::endl;
       }
     }
-    if (res == undefSatLiteral)
-    {
-      d_theoryDecisionExhausted = true;
-    }
   }
   return res;
 }
@@ -359,7 +355,7 @@ bool TheoryProxy::theoryNeedCheck() const
   {
     return false;
   }
-  else if (d_activatedSkDefs || !d_theoryDecisionExhausted.get())
+  else if (d_activatedSkDefs)
   {
     // a new skolem definition became active on the last call to theoryCheck
     return true;
@@ -412,13 +408,7 @@ void TheoryProxy::spendResource(Resource r)
 
 bool TheoryProxy::isDecisionEngineDone()
 {
-  return (d_decisionEngine->isDone() && d_theoryDecisionExhausted.get())
-         || d_stopSearch.get();
-}
-
-bool TheoryProxy::isTheoryDecisionExhausted() const
-{
-  return d_theoryDecisionExhausted.get();
+  return d_decisionEngine->isDone() || d_stopSearch.get();
 }
 
 CnfStream* TheoryProxy::getCnfStream() const { return d_cnfStream; }
