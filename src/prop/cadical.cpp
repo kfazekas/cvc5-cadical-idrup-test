@@ -531,12 +531,16 @@ class CadicalPropagator : public CaDiCaL::ExternalPropagator
       Trace("cadical::propagator") << "set inactive: " << var << std::endl;
     }
 
-    // Re-enqueue fixed theory literals on level 0
+    // Re-enqueue active fixed theory literals on level 0.
     for (SatLiteral lit : d_assignments)
     {
-      if (d_var_info[lit.getSatVariable()].level < level)
+      const auto& info = d_var_info[lit.getSatVariable()];
+      if (info.level < level && info.is_active)
       {
-        Trace("cadical::propagator") << "re-enqueue: " << lit << std::endl;
+        Trace("cadical::propagator")
+            << "re-enqueue: level: " << level << " lit: " << lit
+            << " (level: " << d_var_info[lit.getSatVariable()].level << ")"
+            << std::endl;
         d_proxy->enqueueTheoryLiteral(lit);
       }
     }
