@@ -329,7 +329,7 @@ SatLiteral TheoryProxy::getNextDecisionRequest(bool& requirePhase,
     requirePhase = false;
     if (d_stopSearch.get())
     {
-      Trace("theory-proxy") << "...stopped search, finish" << std::endl;
+      Trace("theory-proxy") << "...stop search, finished" << std::endl;
       stopSearch = true;
     }
     else
@@ -342,7 +342,7 @@ SatLiteral TheoryProxy::getNextDecisionRequest(bool& requirePhase,
       }
       else
       {
-        Trace("theory-proxy") << "...returned next decision" << std::endl;
+        Trace("theory-proxy") << "...return next decision" << std::endl;
       }
     }
     if (res == undefSatLiteral)
