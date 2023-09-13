@@ -311,7 +311,8 @@ SatLiteral TheoryProxy::getNextDecisionRequest(bool& requirePhase,
                                                bool& stopSearch,
                                                bool theoryOnly)
 {
-  Trace("theory-proxy") << "TheoryProxy: getNextDecisionRequest" << std::endl;
+  Trace("theory-proxy") << "TheoryProxy: getNextDecisionRequest"
+                        << (theoryOnly ? " (theory only)" : "") << std::endl;
   requirePhase = false;
   stopSearch = false;
   SatLiteral res = undefSatLiteral;
