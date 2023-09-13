@@ -301,13 +301,16 @@ class CadicalPropagator : public CaDiCaL::ExternalPropagator
     }
     if (!stopSearch && lit != undefSatLiteral)
     {
-      int8_t phase = d_var_info[lit.getSatVariable()].phase;
-      if (phase != 0)
+      if (!requirePhase)
       {
-        if ((phase == -1 && !lit.isNegated())
-            || (phase == 1 && lit.isNegated()))
+        int8_t phase = d_var_info[lit.getSatVariable()].phase;
+        if (phase != 0)
         {
-          lit = ~lit;
+          if ((phase == -1 && !lit.isNegated())
+              || (phase == 1 && lit.isNegated()))
+          {
+            lit = ~lit;
+          }
         }
       }
       Trace("cadical::propagator") << "cb::decide: " << lit << std::endl;
