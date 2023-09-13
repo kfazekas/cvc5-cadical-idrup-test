@@ -549,12 +549,14 @@ class CadicalPropagator : public CaDiCaL::ExternalPropagator
   bool is_fixed(SatVariable var) const { return d_var_info[var].is_fixed; }
 
   /**
-   * Record preferred phase of variable.
-   * @param var The variable.
-   * @param phase The phase, -1 if negative, 1 if positive, 0 if no phase
-   *              is configured.
+   * Configure and record preferred phase of variable.
+   * @param lit The literal.
    */
-  void phase(SatVariable var, uint8_t phase) { d_var_info[var].phase = phase; }
+  void phase(SatLiteral lit)
+  {
+    d_solver.phase(toCadicalLit(lit));
+    d_var_info[lit.getSatVariable()].phase = lit.isNegated() ? -1 : 1;
+  }
 
  private:
   /** Retrieve theory propagations and add them to the propagations list. */
@@ -901,8 +903,7 @@ void CadicalSolver::resetTrail()
 void CadicalSolver::preferPhase(SatLiteral lit)
 {
   Trace("cadical::propagator") << "phase: " << lit << std::endl;
-  d_solver->phase(toCadicalLit(lit));
-  d_propagator->phase(lit.getSatVariable(), lit.isNegated() ? -1 : 1);
+  d_propagator->phase(lit);
 }
 
 bool CadicalSolver::isDecision(SatVariable var) const
