@@ -143,12 +143,9 @@ class TheoryProxy : protected EnvObj, public Registrar
    *                     as-is, in its given polarity.
    * @param stopSearch   True if the current search should be terminated. In
    *                     this case, lit_Undef is returned.
-   * @param theoryOnly   True to query the theory engine for decision requests.
    * @return The next decision.
    */
-  SatLiteral getNextDecisionRequest(bool& requirePhase,
-                                    bool& stopSearch,
-                                    bool theoryOnly = false);
+  SatLiteral getNextDecisionRequest(bool& requirePhase, bool& stopSearch);
 
   bool theoryNeedCheck() const;
 
