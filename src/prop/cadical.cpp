@@ -219,6 +219,14 @@ class CadicalPropagator : public CaDiCaL::ExternalPropagator
       return true;
     }
 
+    // CaDiCaL may backtrack while importing clauses, which can result in some
+    // clauses not being processed. Make sure to add all clauses before
+    // checking the model.
+    if (!d_new_clauses.empty())
+    {
+      return false;
+    }
+
     // Check full model.
     //
     // First, we have to ensure that if the SAT solver determines sat without
@@ -228,7 +236,7 @@ class CadicalPropagator : public CaDiCaL::ExternalPropagator
     // the SAT solver to extend the model with the new variables.
     size_t size = d_var_info.size();
     bool requirePhase, stopSearch;
-    d_proxy->getNextDecisionRequest(requirePhase, stopSearch, true);
+    d_proxy->getNextDecisionRequest(requirePhase, stopSearch);
     if (d_var_info.size() != size)
     {
       return false;
@@ -426,12 +434,8 @@ class CadicalPropagator : public CaDiCaL::ExternalPropagator
           return;
         }
       }
-      // Trace("cadical::propagator") << " " << lit;
-      // d_new_clauses.push_back(toCadicalLit(lit));
       lits.push_back(toCadicalLit(lit));
     }
-    // Trace("cadical::propagator") << " 0" << std::endl;
-    // d_new_clauses.push_back(0);
     if (!lits.empty())
     {
       d_new_clauses.insert(d_new_clauses.end(), lits.begin(), lits.end());
