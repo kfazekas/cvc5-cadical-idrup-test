@@ -305,7 +305,7 @@ class CadicalPropagator : public CaDiCaL::ExternalPropagator
             << "add propagation reason: " << p << std::endl;
         SatClause clause;
         d_proxy->explainPropagation(p, clause);
-        add_clause(clause);
+        add_clause(clause, false);
       }
       d_propagations.clear();
 
@@ -482,7 +482,20 @@ class CadicalPropagator : public CaDiCaL::ExternalPropagator
    * Callback of the SAT solver to determine if we have a new clause to add.
    * @return True to indicate that we have clauses to add.
    */
-  bool cb_has_external_clause() override { return !d_new_clauses.empty(); }
+  bool cb_has_external_clause(unsigned& ct) override
+  {
+    ExternalClauseType type = ExternalClauseType::IrredundantRemember;
+    if (!d_new_clauses_removable.empty())
+    {
+      Assert(!d_new_clauses.empty());
+      if (d_new_clauses_removable.front())
+      {
+        type = ExternalClauseType::IrredundantForget;
+      }
+    }
+    ct = type;
+    return !d_new_clauses.empty();
+  }
 
   /**
    * Callback of the SAT solver to add a new clause.
@@ -494,6 +507,10 @@ class CadicalPropagator : public CaDiCaL::ExternalPropagator
   {
     Assert(!d_new_clauses.empty());
     CadicalLit lit = d_new_clauses.front();
+    if (lit == 0)
+    {
+      d_new_clauses_removable.pop_front();
+    }
     d_new_clauses.pop_front();
     Trace("cadical::propagator")
         << "external_clause: " << toSatLiteral(lit) << std::endl;
@@ -537,9 +554,11 @@ class CadicalPropagator : public CaDiCaL::ExternalPropagator
    *
    * Note: Filters out clauses satisfied by fixed literals.
    *
-   * @param clause The clause to add.
+   * @param clause    The clause to add.
+   * @param removable True to indicate if the clause may be deleted by the
+   *                  SAT solver.
    */
-  void add_clause(const SatClause& clause)
+  void add_clause(const SatClause& clause, bool removable)
   {
     std::vector<CadicalLit> lits;
     for (const SatLiteral& lit : clause)
@@ -574,6 +593,7 @@ class CadicalPropagator : public CaDiCaL::ExternalPropagator
       {
         d_new_clauses.insert(d_new_clauses.end(), lits.begin(), lits.end());
         d_new_clauses.push_back(0);
+        d_new_clauses_removable.push_back(removable);
       }
       else
       {
@@ -582,6 +602,7 @@ class CadicalPropagator : public CaDiCaL::ExternalPropagator
           d_solver.add(lit);
         }
         d_solver.add(0);
+        Assert(!removable);
       }
     }
   }
@@ -931,6 +952,7 @@ class CadicalPropagator : public CaDiCaL::ExternalPropagator
    * cb_add_reason_clause_lit().
    */
   std::deque<CadicalLit> d_new_clauses;
+  std::deque<bool> d_new_clauses_removable;
 
   /**
    * Flag indicating whether cb_add_reason_clause_lit() is currently
@@ -1072,7 +1094,7 @@ ClauseId CadicalSolver::addClause(SatClause& clause, bool removable)
   // If we are currently in search, add clauses through the propagator.
   if (d_propagator)
   {
-    d_propagator->add_clause(clause);
+    d_propagator->add_clause(clause, removable);
   }
   else
   {
