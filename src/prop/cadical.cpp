@@ -74,6 +74,7 @@ class CadicalPropagator : public CaDiCaL::ExternalPropagator
       : d_proxy(proxy), d_context(*context), d_solver(solver)
   {
     d_var_info.emplace_back();  // 0: Not used
+    are_reasons_forgettable = false;
   }
 
   /**
@@ -288,6 +289,12 @@ class CadicalPropagator : public CaDiCaL::ExternalPropagator
     d_proxy->getNextDecisionRequest(requirePhase, stopSearch);
     if (d_var_info.size() != size)
     {
+      Trace("cadical::propagator") << "cb::check_found_model end: new "
+                                      "variables added via theory decision"
+                                   << std::endl;
+      d_new_clauses.push_back(1);
+      d_new_clauses.push_back(-1);
+      d_new_clauses.push_back(0);
       return false;
     }
     // Theory engine may trigger a recheck, unless new variables were added
@@ -482,18 +489,14 @@ class CadicalPropagator : public CaDiCaL::ExternalPropagator
    * Callback of the SAT solver to determine if we have a new clause to add.
    * @return True to indicate that we have clauses to add.
    */
-  bool cb_has_external_clause(unsigned& ct) override
+  bool cb_has_external_clause(bool& is_forgettable) override
   {
-    ExternalClauseType type = ExternalClauseType::IrredundantRemember;
+    is_forgettable = false;
     if (!d_new_clauses_removable.empty())
     {
       Assert(!d_new_clauses.empty());
-      if (d_new_clauses_removable.front())
-      {
-        type = ExternalClauseType::IrredundantForget;
-      }
+      is_forgettable = d_new_clauses_removable.front();
     }
-    ct = type;
     return !d_new_clauses.empty();
   }
 
@@ -507,8 +510,10 @@ class CadicalPropagator : public CaDiCaL::ExternalPropagator
   {
     Assert(!d_new_clauses.empty());
     CadicalLit lit = d_new_clauses.front();
-    if (lit == 0)
+    if (lit == 0 && !d_new_clauses_removable.empty())
     {
+      // d_new_clauses_removable will be empty when d_new_clauses is not
+      // empty if we are in search
       d_new_clauses_removable.pop_front();
     }
     d_new_clauses.pop_front();
@@ -992,6 +997,9 @@ void CadicalSolver::init()
   {
     d_solver->set("walk", 0);
     d_solver->set("lucky", 0);
+    d_solver->set("ilb", 0);
+    d_solver->set("ilbassumptions", 0);
+    //d_solver->set("log", 1);
   }
 
   d_solver->set("quiet", 1);  // CaDiCaL is verbose by default
