@@ -65,7 +65,8 @@ CadicalVar toCadicalVar(SatVariable var) { return var; }
 
 }  // namespace helper functions
 
-class CadicalPropagator : public CaDiCaL::ExternalPropagator
+class CadicalPropagator : public CaDiCaL::ExternalPropagator,
+                          public CaDiCaL::Observer
 {
  public:
   CadicalPropagator(prop::TheoryProxy* proxy,
@@ -78,72 +79,115 @@ class CadicalPropagator : public CaDiCaL::ExternalPropagator
   }
 
   /**
-   * Notification from the SAT solver on assignment of a new literal.
+   * Notification from the SAT solver on assignment of a literal.
    *
    * Saves assignment for notified literal, enqueues corresponding theory
    * literal in theory proxy.
    *
-   * @param lit      The CaDiCaL literal that was assigned.
-   * @param is_fixed True if the assignment is fixed (on level 0).
+   * @param lit The CaDiCaL literal that was assigned.
    */
-  void notify_assignment(int lit, bool is_fixed) override
+  void notify_assignment(const std::vector<int>& lits) override
   {
+    if (Trace("cadical::propagator").isConnected())
+    {
+      Trace("cadical::propagator") << "notif::assignments: { ";
+      for (auto lit : lits)
+      {
+        Trace("cadical::propagator") << lit << " ";
+      }
+      Trace("cadical::propagator") << "}" << std::endl;
+    }
+
     if (d_found_solution)
     {
       return;
     }
 
+    for (const auto& lit : lits)
+    {
+      SatLiteral slit = toSatLiteral(lit);
+      SatVariable var = slit.getSatVariable();
+      Assert(var < d_var_info.size());
+
+      auto& info = d_var_info[var];
+
+      // Only consider active variables
+      if (!info.is_active)
+      {
+        continue;
+      }
+
+      bool is_decision = d_solver.is_decision(lit);
+
+      Trace("cadical::propagator")
+          << "notif::assignment: [" << (is_decision ? "d" : "p") << "] " << slit
+          << " (level: " << d_decisions.size()
+          << ", level_intro: " << info.level_intro
+          << ", level_user: " << current_user_level() << ")" << std::endl;
+
+      // Save decision variables
+      if (is_decision)
+      {
+        d_decisions.back() = slit;
+      }
+
+      Assert(info.assignment == 0 || info.assignment == lit);
+
+      // Only notify theory proxy if variable was assigned a new value, not if
+      // it got fixed after assignment already happend.
+      if (info.assignment == 0)
+      {
+        info.assignment = lit;
+        d_assignments.push_back(slit);
+        if (info.is_theory_atom)
+        {
+          Trace("cadical::propagator") << "enqueue: " << slit << std::endl;
+          Trace("cadical::propagator")
+              << "node:    " << d_proxy->getNode(slit) << std::endl;
+          d_proxy->enqueueTheoryLiteral(slit);
+        }
+      }
+    }
+  }
+
+  /**
+   * Notification from the SAT solver on fixed assignment of a literal.
+   *
+   * Notifications on fixed assignment are sent during the search, while
+   * regular assignment notifications are sent batch-wise, before the first
+   * callback is issued. This thus calls notify_assignment() to trigger what
+   * needs to be done on assignment. Already notified fixed assignments are
+   * then skipped in notify_assignment().
+   *
+   * @param lit The CaDiCaL literal that was fixed.
+   */
+  void notify_fixed_assignment(int lit) override
+  {
     SatLiteral slit = toSatLiteral(lit);
     SatVariable var = slit.getSatVariable();
-    Assert(var < d_var_info.size());
+
+    // We don't care about non-observed variables
+    if (var >= d_var_info.size())
+    {
+      return;
+    }
 
     auto& info = d_var_info[var];
-
     // Only consider active variables
     if (!info.is_active)
     {
       return;
     }
 
-    bool is_decision = d_solver.is_decision(lit);
-
     Trace("cadical::propagator")
-        << "notif::assignment: [" << (is_decision ? "d" : "p") << "] " << slit
-        << " (fixed: " << is_fixed << ", level: " << d_decisions.size()
-        << ", level_intro: " << info.level_intro
-        << ", level_user: " << current_user_level() << ")" << std::endl;
+        << "notif::fixed assignment: " << slit << std::endl;
 
-    // Save decision variables
-    if (is_decision)
-    {
-      d_decisions.back() = slit;
-    }
-
-    Assert(info.assignment == 0 || info.assignment == lit);
-    Assert(info.assignment == 0 || is_fixed);
-
-    // Assignment of literal is fixed
-    if (is_fixed)
-    {
-      Assert(!info.is_fixed);
-      info.is_fixed = true;
-      info.level_fixed = current_user_level();
-    }
-
-    // Only notify theory proxy if variable was assigned a new value, not if it
-    // got fixed after assignment already happend.
-    if (info.assignment == 0)
-    {
-      info.assignment = lit;
-      d_assignments.push_back(slit);
-      if (info.is_theory_atom)
-      {
-        Trace("cadical::propagator") << "enqueue: " << slit << std::endl;
-        Trace("cadical::propagator")
-            << "node:    " << d_proxy->getNode(slit) << std::endl;
-        d_proxy->enqueueTheoryLiteral(slit);
-      }
-    }
+    // Mark as fixed.
+    Assert(!info.is_fixed);
+    info.is_fixed = true;
+    info.level_fixed = current_user_level();
+    // Trigger actual assignment.
+    notify_assignment({lit});
   }
 
   /**
@@ -196,26 +240,14 @@ class CadicalPropagator : public CaDiCaL::ExternalPropagator
     size_t pop_to = d_assignment_control[level];
     d_assignment_control.resize(level);
 
-    std::vector<SatLiteral> fixed;
     while (pop_to < d_assignments.size())
     {
       SatLiteral lit = d_assignments.back();
       d_assignments.pop_back();
       SatVariable var = lit.getSatVariable();
       auto& info = d_var_info[var];
-      if (info.is_fixed)
-      {
-        if (info.is_theory_atom)
-        {
-          Assert(info.is_active);
-          fixed.push_back(lit);
-        }
-      }
-      else
-      {
-        Trace("cadical::propagator") << "unassign: " << var << std::endl;
-        info.assignment = 0;
-      }
+      Trace("cadical::propagator") << "unassign: " << var << std::endl;
+      info.assignment = 0;
     }
 
     // Notify theory proxy about backtrack
@@ -223,15 +255,6 @@ class CadicalPropagator : public CaDiCaL::ExternalPropagator
     // Clear the propgations since they are not valid anymore.
     d_propagations.clear();
 
-    // Re-enqueue fixed theory literals that got removed. Re-enqueue in the
-    // order they got assigned in, i.e., reverse order on vector `fixed`.
-    for (auto it = fixed.rbegin(), end = fixed.rend(); it != end; ++it)
-    {
-      SatLiteral lit = *it;
-      Trace("cadical::propagator") << "re-enqueue: " << lit << std::endl;
-      d_proxy->enqueueTheoryLiteral(lit);
-      d_assignments.push_back(lit);
-    }
     Trace("cadical::propagator") << "notif::backtrack end" << std::endl;
   }
 
@@ -1203,9 +1226,9 @@ void CadicalSolver::initialize(context::Context* context,
   d_context = context;
   d_proxy = theoryProxy;
   d_propagator.reset(new CadicalPropagator(theoryProxy, context, *d_solver));
-  d_solver->connect_external_propagator(d_propagator.get());
-
   init();
+  d_solver->connect_observer(d_propagator.get());
+  d_solver->connect_external_propagator(d_propagator.get());
 }
 
 void CadicalSolver::push()
