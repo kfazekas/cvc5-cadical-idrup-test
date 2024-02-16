@@ -515,11 +515,11 @@ class CadicalPropagator : public CaDiCaL::ExternalPropagator,
   bool cb_has_external_clause(bool& is_forgettable) override
   {
     is_forgettable = false;
-    if (!d_new_clauses_removable.empty())
-    {
-      Assert(!d_new_clauses.empty());
-      is_forgettable = d_new_clauses_removable.front();
-    }
+    //if (!d_new_clauses_removable.empty())
+    //{
+    //  Assert(!d_new_clauses.empty());
+    //  is_forgettable = d_new_clauses_removable.front();
+    //}
     return !d_new_clauses.empty();
   }
 
