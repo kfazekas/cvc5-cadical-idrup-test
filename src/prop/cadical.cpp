@@ -1104,7 +1104,6 @@ SatValue CadicalSolver::_solve(const std::vector<SatLiteral>& assumptions)
   }
   ++d_statistics.d_numSatCalls;
   d_inSatMode = (res == SAT_VALUE_TRUE);
-  d_solver->flush_proof_trace(true); 
   return res;
 }
 
