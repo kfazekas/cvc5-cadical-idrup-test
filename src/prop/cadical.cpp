@@ -1023,9 +1023,9 @@ void CadicalSolver::init()
     d_solver->set("ilb", 0);
     d_solver->set("ilbassumptions", 0);
     //d_solver->set("log", 1);
-    d_solver->set("idrup", 1);
-    d_solver->set("binary", 0);
-    d_solver->trace_proof("/tmp/cvc5-propagator.idrup");
+    // d_solver->set("idrup", 1);
+    // d_solver->set("binary", 0);
+    // d_solver->trace_proof("/tmp/cvc5-propagator.idrup");
   }
 
   d_solver->set("quiet", 1);  // CaDiCaL is verbose by default

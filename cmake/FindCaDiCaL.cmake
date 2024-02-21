@@ -60,6 +60,11 @@ if(NOT CaDiCaL_FOUND_SYSTEM)
   set(CaDiCaL_VERSION "73873e3")
   set(CaDiCaL_CHECKSUM "1f8150ef7a4c4fdd1a9d77c6fd498a4435b87ddd")
 
+  
+  # Version 2.0.0-rc5 with both IPASIR-UP and LIDRUP support:
+  set(CaDiCaL_VERSION "f22054a")
+  set(CaDiCaL_CHECKSUM "f22054ae8017841229dc0d542fd9ae622ac89045")
+
   # avoid configure script and instantiate the makefile manually the configure
   # scripts unnecessarily fails for cross compilation thus we do the bare
   # minimum from the configure script here
